@@ -176,7 +176,7 @@ func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error) {
 		if sc.logging {
 			log.Error(err)
 		}
-		return nil, nil
+		return nil, err
 	}
 	return bytes.NewReader(b), nil
 }
