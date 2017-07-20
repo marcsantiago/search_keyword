@@ -97,13 +97,13 @@ func normalizeURL(URL string) (s string, err error) {
 }
 
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
-func NewScanner(limit int, logging bool) (sc *Scanner) {
-	sc.Sema = make(chan struct{}, limit)
-	sc.WasFound = make(map[string]bool)
-	sc.logging = logging
-	// defaulting to 20..maybe in the future i'll open up that control
-	sc.buffer = NewBufferPool(20)
-	return
+func NewScanner(limit int, enableLogging bool) *Scanner {
+	return &Scanner{
+		Sema:     make(chan struct{}, limit),
+		WasFound: make(map[string]bool),
+		logging:  enableLogging,
+		buffer:   NewBufferPool(limit / 2),
+	}
 }
 
 // Search looks for the passed keyword in the html respose
