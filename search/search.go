@@ -139,9 +139,21 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	res, err := client.Get(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Errorf("%v trying with https", err)
 		}
-		return err
+		if !strings.Contains(URL, "https:") {
+			URL = strings.Replace(URL, "http", "https", -1)
+			res, err = client.Get(URL)
+			if err != nil {
+				if sc.logging {
+					log.Errorf("%v https failed also", err)
+				}
+				sc.mxt.Lock()
+				sc.WasFound[URL] = false
+				sc.mxt.Unlock()
+			}
+			return err
+		}
 	}
 	defer res.Body.Close()
 

@@ -52,22 +52,19 @@ func main() {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		wg.Add(1)
+		line := scanner.Text()
 		// for this particular example urls are stored in a file like so
 		// 1,"facebook.com/",9616487,1688316928,9.54,9.34
 		// so I'm going to parse that file to get the url
-		go func(wg *sync.WaitGroup, sc *search.Scanner) {
-			wg.Done()
-			line := scanner.Text()
+		go func(line string, wg *sync.WaitGroup, sc *search.Scanner) {
+			defer wg.Done()
 			parts := strings.Split(line, ",")
-			if len(parts) != 0 {
-				return
-			}
-			URL := parts[1]
+			URL := strings.Replace(parts[1], "\"", "", -1)
 			err := sc.Search(URL, *keyword)
 			if err != nil {
 				log.Warningf("%s had and issue %v\n", URL, err)
 			}
-		}(&wg, sc)
+		}(line, &wg, sc)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -95,7 +92,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// or more raw...or however you see fit
+	// OR more raw...or however you see fit
 
 	// reader, err := sc.MapToIOReaderWriter()
 	// if err != nil {
