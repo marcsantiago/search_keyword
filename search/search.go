@@ -23,28 +23,28 @@ var (
 	ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
 )
 
-// BufferPool maintains byte buffers used to read html content
-type BufferPool struct {
+// bufferPool maintains byte buffers used to read html content
+type bufferPool struct {
 	pool sync.Pool
 }
 
-// NewBufferPool creates a new BufferPool bounded to the given size.
-func NewBufferPool(size int) *BufferPool {
-	var bp BufferPool
+// newbufferPool creates a new bufferPool bounded to the given size.
+func newbufferPool(size int) *bufferPool {
+	var bp bufferPool
 	bp.pool.New = func() interface{} {
 		return new(bytes.Buffer)
 	}
 	return &bp
 }
 
-// Get gets a Buffer from the BufferPool, or creates a new one if none are
+// Get gets a Buffer from the bufferPool, or creates a new one if none are
 // available in the pool.
-func (bp *BufferPool) Get() *bytes.Buffer {
+func (bp *bufferPool) Get() *bytes.Buffer {
 	return bp.pool.Get().(*bytes.Buffer)
 }
 
-// Put returns the given Buffer to the BufferPool.
-func (bp *BufferPool) Put(b *bytes.Buffer) {
+// Put returns the given Buffer to the bufferPool.
+func (bp *bufferPool) Put(b *bytes.Buffer) {
 	b.Reset()
 	bp.pool.Put(b)
 }
@@ -56,7 +56,7 @@ type Scanner struct {
 	// WasFound maps the url to whether or not the keyword was found
 	WasFound map[string]bool
 
-	buffer  *BufferPool // buffer used to read html content
+	buffer  *bufferPool // buffer used to read html content
 	logging bool        // turn on and off logging
 	mxt     sync.Mutex  // used internally to lock writing to the map
 }
@@ -102,7 +102,7 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 		Sema:     make(chan struct{}, limit),
 		WasFound: make(map[string]bool),
 		logging:  enableLogging,
-		buffer:   NewBufferPool(limit / 2),
+		buffer:   newbufferPool(limit / 2),
 	}
 }
 
