@@ -22,6 +22,7 @@ func main() {
 	inputFile := flag.String("in", "", "the input file path containing the list of urls")
 	outFile := flag.String("out", "", "output file path")
 	keyword := flag.String("keyword", "", "keyword to search for")
+	limit := flag.Int("limit", 20, "set the limit of goroutines to spin up")
 	flag.Parse()
 
 	if *inputFile == "" {
@@ -46,7 +47,7 @@ func main() {
 	defer file.Close()
 
 	var wg sync.WaitGroup
-	sc := search.NewScanner(20, true)
+	sc := search.NewScanner(*limit, true)
 
 	// reading file line by line, no need to store whole file in mem
 	scanner := bufio.NewScanner(file)
