@@ -78,7 +78,7 @@ func TestNewBufferPool(t *testing.T) {
 
 	for n := range readerCh {
 		if n.Len() < 0 {
-			t.Errorf("the buffer should be zero since it was put back on defer")
+			t.Errorf("the buffer hold data i did not put the buffer back")
 		}
 	}
 }
