@@ -3,14 +3,23 @@ package search
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+)
+
+var (
+	// ErrURLEmpty to warn users that they passed an empty string in
+	ErrURLEmpty = fmt.Errorf("the url string is empty")
+	// ErrDomainMissing domain was missing from the url
+	ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
 )
 
 // BufferPool maintains byte buffers used to read html content
@@ -51,8 +60,39 @@ type Scanner struct {
 	mxt     sync.Mutex  // used internally to lock writing to the map
 }
 
-func normalizeURl(url string) string {
-	return ""
+func normalizeURL(URL string) (s string, err error) {
+	if URL == "" {
+		err = ErrURLEmpty
+		return
+	}
+
+	u, err := url.Parse(URL)
+	if err != nil {
+		return
+	}
+
+	scheme := u.Scheme
+	path := u.Hostname()
+	if path == "" {
+		path = strings.Replace(u.Path, "/", "", -1)
+	}
+
+	parts := strings.Split(path, ".")
+	if len(parts) < 2 {
+		err = ErrDomainMissing
+		return
+	}
+
+	if scheme == "" {
+		scheme = "http"
+	}
+	s = fmt.Sprintf("%s:%s", scheme, path)
+
+	if !strings.Contains(path, "://") {
+		s = fmt.Sprintf("%s://%s", scheme, path)
+	}
+
+	return
 }
 
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
@@ -66,13 +106,21 @@ func NewScanner(limit int, logging bool) (sc *Scanner) {
 }
 
 // Search looks for the passed keyword in the html respose
-func (sc *Scanner) Search(url, keyword string) (err error) {
+func (sc *Scanner) Search(URL, keyword string) (err error) {
 	// make sure to use the semaphore we've defined
 	sc.Sema <- struct{}{}
 	defer func() { <-sc.Sema }()
 
 	if sc.logging {
-		log.Infof("looking for the keyword %s in the url %s\n", keyword, url)
+		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
+	}
+
+	URL, err = normalizeURL(URL)
+	if err != nil {
+		if sc.logging {
+			log.Error(err)
+		}
+		return err
 	}
 
 	// not assuming a regex pattern will be passed
@@ -87,7 +135,7 @@ func (sc *Scanner) Search(url, keyword string) (err error) {
 		Timeout: time.Second * 10,
 	}
 
-	res, err := client.Get(url)
+	res, err := client.Get(URL)
 	if err != nil {
 		if sc.logging {
 			log.Error(err)
@@ -102,7 +150,7 @@ func (sc *Scanner) Search(url, keyword string) (err error) {
 
 	found := searchRegex.Match(buf.Bytes())
 	sc.mxt.Lock()
-	sc.WasFound[url] = found
+	sc.WasFound[URL] = found
 	sc.mxt.Unlock()
 	return
 }
