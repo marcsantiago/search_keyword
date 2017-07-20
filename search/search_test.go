@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"io/ioutil"
 	"sync"
 	"testing"
 )
@@ -113,6 +114,42 @@ func TestScanner(t *testing.T) {
 		}
 	} else {
 		t.Errorf("key %s should have been present", key)
+	}
+
+}
+
+func TestMapToIOReader(t *testing.T) {
+	key := "http://facebook.com"
+	sc := NewScanner(1, true)
+	err := sc.Search("facebook.com/", "Connect with friends")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(sc.WasFound) != 1 {
+		t.Errorf("the map should only have one value in it, found %d", len(sc.WasFound))
+	}
+
+	if val, ok := sc.WasFound[key]; ok {
+		if val != true {
+			t.Errorf("connect with friends should have been found in the html")
+		}
+	} else {
+		t.Errorf("key %s should have been present", key)
+	}
+
+	reader, err := sc.MapToIOReaderWriter()
+	if err != nil {
+		t.Error(err)
+	}
+
+	b, err := ioutil.ReadAll(reader)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(b) == 0 {
+		t.Errorf("bytes should not be 0")
 	}
 
 }
