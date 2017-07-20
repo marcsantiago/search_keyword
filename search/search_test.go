@@ -85,7 +85,7 @@ func TestNewBufferPool(t *testing.T) {
 
 func TestScanner(t *testing.T) {
 	key := "http://facebook.com"
-	sc := NewScanner(1, true)
+	sc := NewScanner(1, false)
 	err := sc.Search("facebook.com/", "Connect with friends")
 	if err != nil {
 		t.Error(err)
@@ -120,7 +120,7 @@ func TestScanner(t *testing.T) {
 
 func TestMapToIOReader(t *testing.T) {
 	key := "http://facebook.com"
-	sc := NewScanner(1, true)
+	sc := NewScanner(1, false)
 	err := sc.Search("facebook.com/", "Connect with friends")
 	if err != nil {
 		t.Error(err)
