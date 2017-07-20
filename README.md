@@ -18,10 +18,6 @@ Package search searches for a keyword within the html of pages concurrently
 
 ## <a name="pkg-index">Index</a>
 * [Variables](#pkg-variables)
-* [type BufferPool](#BufferPool)
-  * [func NewBufferPool(size int) *BufferPool](#NewBufferPool)
-  * [func (bp *BufferPool) Get() *bytes.Buffer](#BufferPool.Get)
-  * [func (bp *BufferPool) Put(b *bytes.Buffer)](#BufferPool.Put)
 * [type Scanner](#Scanner)
   * [func NewScanner(limit int, enableLogging bool) *Scanner](#NewScanner)
   * [func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error)](#Scanner.MapToIOReaderWriter)
@@ -42,49 +38,6 @@ var (
     ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
 )
 ```
-
-
-
-## <a name="BufferPool">type</a> [BufferPool](/src/target/search.go?s=557:599#L17)
-``` go
-type BufferPool struct {
-    // contains filtered or unexported fields
-}
-```
-BufferPool maintains byte buffers used to read html content
-
-
-
-
-
-
-
-### <a name="NewBufferPool">func</a> [NewBufferPool](/src/target/search.go?s=670:710#L22)
-``` go
-func NewBufferPool(size int) *BufferPool
-```
-NewBufferPool creates a new BufferPool bounded to the given size.
-
-
-
-
-
-### <a name="BufferPool.Get">func</a> (\*BufferPool) [Get](/src/target/search.go?s=914:955#L32)
-``` go
-func (bp *BufferPool) Get() *bytes.Buffer
-```
-Get gets a Buffer from the BufferPool, or creates a new one if none are
-available in the pool.
-
-
-
-
-### <a name="BufferPool.Put">func</a> (\*BufferPool) [Put](/src/target/search.go?s=1050:1092#L37)
-``` go
-func (bp *BufferPool) Put(b *bytes.Buffer)
-```
-Put returns the given Buffer to the BufferPool.
-
 
 
 
