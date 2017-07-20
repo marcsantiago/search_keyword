@@ -30,7 +30,7 @@ func TestNormalizeURL(t *testing.T) {
 
 func TestNewBufferPoolResets(t *testing.T) {
 	limit := 10
-	pool := NewBufferPool(limit)
+	pool := newbufferPool(limit)
 	var wg sync.WaitGroup
 	readerCh := make(chan *bytes.Buffer, limit)
 	for i := 0; i <= limit; i++ {
@@ -58,7 +58,7 @@ func TestNewBufferPoolResets(t *testing.T) {
 
 func TestNewBufferPool(t *testing.T) {
 	limit := 10
-	pool := NewBufferPool(limit)
+	pool := newbufferPool(limit)
 	var wg sync.WaitGroup
 	readerCh := make(chan *bytes.Buffer, limit)
 	for i := 0; i <= limit; i++ {
