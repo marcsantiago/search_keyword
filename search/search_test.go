@@ -28,6 +28,38 @@ func TestNormalizeURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeURLDomainMissing(t *testing.T) {
+	var cases = []struct {
+		In  string
+		Out string
+	}{
+		{"facebook", ""},
+	}
+
+	for _, c := range cases {
+		_, err := normalizeURL(c.In)
+		if err != ErrDomainMissing {
+			t.Errorf("err got: %v wanted: %v", err, ErrDomainMissing)
+		}
+	}
+}
+
+func TestNormalizeURLEmpty(t *testing.T) {
+	var cases = []struct {
+		In  string
+		Out string
+	}{
+		{"", ""},
+	}
+
+	for _, c := range cases {
+		_, err := normalizeURL(c.In)
+		if err != ErrURLEmpty {
+			t.Errorf("err got: %v wanted: %v", err, ErrDomainMissing)
+		}
+	}
+}
+
 func TestNewBufferPoolResets(t *testing.T) {
 	limit := 10
 	pool := newbufferPool(limit)
