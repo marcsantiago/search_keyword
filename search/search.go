@@ -49,16 +49,43 @@ func (bp *bufferPool) Put(b *bytes.Buffer) {
 	bp.pool.Put(b)
 }
 
+// Result is the basic return type for Search and SearchWithRegx
+type Result struct {
+	// Keyword is the passed keyword. It is an interface because it can be a string or regular expression
+	Keyword interface{}
+	// URL is the url passed in
+	URL string
+	// Found determines whether or not the keyword was matched on the page
+	Found bool
+}
+
+// Results is the plural of results which implements the Sort interface. Sorting by URL.  If the slice needs to be sorted then the user can call sort.Sort
+type Results []Result
+
+func (slice Results) Len() int {
+	return len(slice)
+}
+
+func (slice Results) Less(i, j int) bool {
+	return slice[i].URL < slice[j].URL
+}
+
+func (slice Results) Swap(i, j int) {
+	slice[i], slice[j] = slice[j], slice[i]
+}
+
 // Scanner is the basic structure used to interact with the html content of the page
 type Scanner struct {
-	// used to limit the number of goroutines spinning up
-	Sema chan struct{}
-	// WasFound maps the url to whether or not the keyword was found
-	WasFound map[string]bool
-
-	buffer  *bufferPool // buffer used to read html content
-	logging bool        // turn on and off logging
-	mxt     sync.Mutex  // used internally to lock writing to the map
+	// sema is used to limit the number of goroutines spinning up
+	sema chan struct{}
+	// results is a slice of result
+	results Results
+	// buffer used to read html content
+	buffer *bufferPool
+	// turn on and off logging
+	logging bool
+	// used internally to lock writing to the map
+	mxt sync.Mutex
 }
 
 func normalizeURL(URL string) (s string, err error) {
@@ -103,24 +130,23 @@ func normalizeURL(URL string) (s string, err error) {
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
 func NewScanner(limit int, enableLogging bool) *Scanner {
 	return &Scanner{
-		Sema:     make(chan struct{}, limit),
-		WasFound: make(map[string]bool),
-		logging:  enableLogging,
-		buffer:   newbufferPool(limit / 2),
+		sema:    make(chan struct{}, limit),
+		logging: enableLogging,
+		buffer:  newbufferPool(limit / 2),
 	}
 }
 
-func (sc *Scanner) writeToMap(URL string, found bool) {
+func (sc *Scanner) writeToMap(URL string, keyword interface{}, found bool) {
 	sc.mxt.Lock()
-	sc.WasFound[URL] = found
+	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword})
 	sc.mxt.Unlock()
 }
 
 // Search looks for the passed keyword in the html respose
 func (sc *Scanner) Search(URL, keyword string) (err error) {
 	// make sure to use the semaphore we've defined
-	sc.Sema <- struct{}{}
-	defer func() { <-sc.Sema }()
+	sc.sema <- struct{}{}
+	defer func() { <-sc.sema }()
 
 	if sc.logging {
 		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
@@ -158,7 +184,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, false)
+				sc.writeToMap(URL, keyword, false)
 			}
 			return err
 		}
@@ -170,15 +196,15 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	defer sc.buffer.Put(buf)
 
 	found := searchRegex.Match(buf.Bytes())
-	sc.writeToMap(URL, found)
+	sc.writeToMap(URL, keyword, found)
 	return
 }
 
 // SearchWithRegx allows you to pass a regular expression i as a search paramter
 func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
 	// make sure to use the semaphore we've defined
-	sc.Sema <- struct{}{}
-	defer func() { <-sc.Sema }()
+	sc.sema <- struct{}{}
+	defer func() { <-sc.sema }()
 
 	if sc.logging {
 		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
@@ -208,7 +234,7 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, false)
+				sc.writeToMap(URL, keyword, false)
 			}
 			return err
 		}
@@ -220,16 +246,14 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	defer sc.buffer.Put(buf)
 
 	found := keyword.Match(buf.Bytes())
-	sc.writeToMap(URL, found)
+	sc.writeToMap(URL, keyword, found)
 	return
 }
 
-// MapToIOReaderWriter converts the map of urls: bool to an io.Reader so that the end user can decide how they want that data
+// ResultsToReader sorts a slice of Result to an io.Reader so that the end user can decide how they want that data
 // csv, text, etc
-func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error) {
-	sc.mxt.Lock()
-	b, err := json.Marshal(sc.WasFound)
-	sc.mxt.Unlock()
+func (sc *Scanner) ResultsToReader() (io.Reader, error) {
+	b, err := json.Marshal(sc.results)
 	if err != nil {
 		if sc.logging {
 			log.Error(err)
@@ -237,4 +261,9 @@ func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error) {
 		return nil, err
 	}
 	return bytes.NewReader(b), nil
+}
+
+// GetResults returns raw results not converted to a io.Reader
+func (sc *Scanner) GetResults() Results {
+	return sc.results
 }

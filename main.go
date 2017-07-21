@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -80,9 +81,11 @@ func main() {
 		log.Warning("Buffer could not write initial string")
 	}
 
-	// two ways of getting the data..directly from the map
-	for key, val := range sc.WasFound {
-		line := fmt.Sprintf("%s, %v\n", key, val)
+	res := sc.GetResults()
+	// sorting the slice for easier viewing
+	sort.Sort(res)
+	for _, r := range res {
+		line := fmt.Sprintf("%s, %v\n", r.URL, r.Found)
 		_, err = buf.WriteString(line)
 		if err != nil {
 			log.Warningf("couldn't write string %s", line)
@@ -92,21 +95,4 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// OR more raw...or however you see fit
-
-	// reader, err := sc.MapToIOReaderWriter()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// b, err := json.MarshalIndent(reader, "", " ")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// err = ioutil.WriteFile(*outFile, b, 0644)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 }
