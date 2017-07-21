@@ -62,34 +62,6 @@ func TestNormalizeURLEmpty(t *testing.T) {
 	}
 }
 
-func TestNewBufferPoolResets(t *testing.T) {
-	limit := 10
-	pool := newbufferPool(limit)
-	var wg sync.WaitGroup
-	readerCh := make(chan *bytes.Buffer, limit)
-	for i := 0; i <= limit; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			buf := pool.Get()
-			buf.WriteByte(byte(i))
-			pool.Put(buf)
-			readerCh <- buf
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(readerCh)
-	}()
-
-	for n := range readerCh {
-		if n.Len() > 0 {
-			t.Errorf("the buffer should be zero since it was put back on defer")
-		}
-	}
-}
-
 func TestNewBufferPool(t *testing.T) {
 	limit := 10
 	pool := newbufferPool(limit)
