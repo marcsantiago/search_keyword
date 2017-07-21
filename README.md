@@ -1,9 +1,6 @@
 # search_keyword
 interview question keeping company name secret to avoid copy and pasting ;-)
 
-Example use
-`go run main.go -in example_input_and_output/urls.txt -out example_input_and_output/results.txt -keyword "sign up"`
-
 # search
 `import "github.com/marcsantiago/search_keyword/search"`
 
@@ -11,7 +8,7 @@ Example use
 * [Index](#pkg-index)
 
 ## <a name="pkg-overview">Overview</a>
-Package search searches for a keyword within the html of pages concurrently
+Package search searches for a keyword within the html of pages (safe for concurrent use)
 
 
 
@@ -22,6 +19,7 @@ Package search searches for a keyword within the html of pages concurrently
   * [func NewScanner(limit int, enableLogging bool) *Scanner](#NewScanner)
   * [func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error)](#Scanner.MapToIOReaderWriter)
   * [func (sc *Scanner) Search(URL, keyword string) (err error)](#Scanner.Search)
+  * [func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error)](#Scanner.SearchWithRegx)
 
 
 #### <a name="pkg-files">Package files</a>
@@ -41,7 +39,7 @@ var (
 
 
 
-## <a name="Scanner">type</a> [Scanner](/src/target/search.go?s=1210:1573#L43)
+## <a name="Scanner">type</a> [Scanner](/src/target/search.go?s=1223:1586#L43)
 ``` go
 type Scanner struct {
     // used to limit the number of goroutines spinning up
@@ -59,7 +57,7 @@ Scanner is the basic structure used to interact with the html content of the pag
 
 
 
-### <a name="NewScanner">func</a> [NewScanner](/src/target/search.go?s=2228:2283#L90)
+### <a name="NewScanner">func</a> [NewScanner](/src/target/search.go?s=2296:2351#L94)
 ``` go
 func NewScanner(limit int, enableLogging bool) *Scanner
 ```
@@ -69,7 +67,7 @@ NewScanner returns a new scanner that takes a limit as a paramter to limit the n
 
 
 
-### <a name="Scanner.MapToIOReaderWriter">func</a> (\*Scanner) [MapToIOReaderWriter](/src/target/search.go?s=3931:3990#L163)
+### <a name="Scanner.MapToIOReaderWriter">func</a> (\*Scanner) [MapToIOReaderWriter](/src/target/search.go?s=5127:5186#L219)
 ``` go
 func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error)
 ```
@@ -79,11 +77,20 @@ csv, text, etc
 
 
 
-### <a name="Scanner.Search">func</a> (\*Scanner) [Search](/src/target/search.go?s=2509:2567#L100)
+### <a name="Scanner.Search">func</a> (\*Scanner) [Search](/src/target/search.go?s=2694:2752#L110)
 ``` go
 func (sc *Scanner) Search(URL, keyword string) (err error)
 ```
 Search looks for the passed keyword in the html respose
+
+
+
+
+### <a name="Scanner.SearchWithRegx">func</a> (\*Scanner) [SearchWithRegx](/src/target/search.go?s=3985:4066#L168)
+``` go
+func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error)
+```
+SearchWithRegx allows you to pass a regular expression i as a search paramter
 
 
 
