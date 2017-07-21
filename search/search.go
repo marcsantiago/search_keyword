@@ -123,7 +123,6 @@ func normalizeURL(URL string) (s string, err error) {
 	if strings.Count(u.Path, "/") > 1 {
 		s += u.Path
 	}
-
 	return
 }
 
@@ -140,6 +139,7 @@ func (sc *Scanner) writeToMap(URL string, keyword interface{}, found bool) {
 	sc.mxt.Lock()
 	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword})
 	sc.mxt.Unlock()
+	return
 }
 
 // Search looks for the passed keyword in the html respose
@@ -192,8 +192,8 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	defer res.Body.Close()
 
 	buf := sc.buffer.Get()
-	io.Copy(buf, res.Body)
 	defer sc.buffer.Put(buf)
+	io.Copy(buf, res.Body)
 
 	found := searchRegex.Match(buf.Bytes())
 	sc.writeToMap(URL, keyword, found)
@@ -242,8 +242,8 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	defer res.Body.Close()
 
 	buf := sc.buffer.Get()
-	io.Copy(buf, res.Body)
 	defer sc.buffer.Put(buf)
+	io.Copy(buf, res.Body)
 
 	found := keyword.Match(buf.Bytes())
 	sc.writeToMap(URL, keyword, found)
