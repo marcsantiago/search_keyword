@@ -39,8 +39,8 @@ func TestNewBufferPoolResets(t *testing.T) {
 			defer wg.Done()
 			buf := pool.Get()
 			buf.WriteByte(byte(i))
+			pool.Put(buf)
 			readerCh <- buf
-			defer pool.Put(buf)
 		}()
 	}
 
