@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"io/ioutil"
+	"regexp"
 	"sync"
 	"testing"
 )
@@ -17,6 +18,7 @@ func TestNormalizeURL(t *testing.T) {
 		{"https://facebook.com/", "https://facebook.com"},
 		{"", ""},
 		{"facebook", ""},
+		{"https://en.wikipedia.org/wiki/Email_address", "https://en.wikipedia.org/wiki/Email_address"},
 	}
 
 	for i, c := range cases {
@@ -147,7 +149,29 @@ func TestScanner(t *testing.T) {
 	} else {
 		t.Errorf("key %s should have been present", key)
 	}
+}
 
+func TestScannerRegx(t *testing.T) {
+	key := "https://en.wikipedia.org/wiki/Email_address"
+	reg := regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
+
+	sc := NewScanner(1, false)
+	err := sc.SearchWithRegx("https://en.wikipedia.org/wiki/Email_address", reg)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(sc.WasFound) != 1 {
+		t.Errorf("the map should only have one value in it, found %d", len(sc.WasFound))
+	}
+
+	if val, ok := sc.WasFound[key]; ok {
+		if val != true {
+			t.Errorf("an email addres shoulf have been  found  found in the html")
+		}
+	} else {
+		t.Errorf("key %s should have been present", key)
+	}
 }
 
 func TestMapToIOReader(t *testing.T) {

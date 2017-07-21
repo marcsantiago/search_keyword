@@ -93,6 +93,10 @@ func normalizeURL(URL string) (s string, err error) {
 		s = fmt.Sprintf("%s://%s", scheme, path)
 	}
 
+	if strings.Count(u.Path, "/") > 1 {
+		s += u.Path
+	}
+
 	return
 }
 
@@ -166,6 +170,56 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	defer sc.buffer.Put(buf)
 
 	found := searchRegex.Match(buf.Bytes())
+	sc.writeToMap(URL, found)
+	return
+}
+
+// SearchWithRegx allows you to pass a regular expression i as a search paramter
+func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
+	// make sure to use the semaphore we've defined
+	sc.Sema <- struct{}{}
+	defer func() { <-sc.Sema }()
+
+	if sc.logging {
+		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
+	}
+
+	URL, err = normalizeURL(URL)
+	if err != nil {
+		if sc.logging {
+			log.Error(err)
+		}
+		return err
+	}
+
+	var client = &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	res, err := client.Get(URL)
+	if err != nil {
+		if sc.logging {
+			log.Errorf("%v trying with https", err)
+		}
+		if !strings.Contains(URL, "https:") {
+			URL = strings.Replace(URL, "http", "https", -1)
+			res, err = client.Get(URL)
+			if err != nil {
+				if sc.logging {
+					log.Errorf("%v https failed also", err)
+				}
+				sc.writeToMap(URL, false)
+			}
+			return err
+		}
+	}
+	defer res.Body.Close()
+
+	buf := sc.buffer.Get()
+	io.Copy(buf, res.Body)
+	defer sc.buffer.Put(buf)
+
+	found := keyword.Match(buf.Bytes())
 	sc.writeToMap(URL, found)
 	return
 }
