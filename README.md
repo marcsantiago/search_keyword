@@ -1,8 +1,7 @@
 # search_keyword
 interview question keeping company name secret to avoid copy and pasting ;-)
 *Example Use:*
-`go run main.go -in example_input_and_output/urls.txt -out example_i
-nput_and_output/result`
+`go run main.go -in example_input_and_output/urls.txt -out example_input_and_output/results.txt -keyword "sign up"`
 
 # search
 `import "github.com/marcsantiago/search_keyword/search"`
