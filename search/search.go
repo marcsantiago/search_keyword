@@ -106,6 +106,12 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 	}
 }
 
+func (sc *Scanner) writeToMap(URL string, found bool) {
+	sc.mxt.Lock()
+	sc.WasFound[URL] = found
+	sc.mxt.Unlock()
+}
+
 // Search looks for the passed keyword in the html respose
 func (sc *Scanner) Search(URL, keyword string) (err error) {
 	// make sure to use the semaphore we've defined
@@ -148,9 +154,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.mxt.Lock()
-				sc.WasFound[URL] = false
-				sc.mxt.Unlock()
+				sc.writeToMap(URL, false)
 			}
 			return err
 		}
@@ -162,9 +166,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	defer sc.buffer.Put(buf)
 
 	found := searchRegex.Match(buf.Bytes())
-	sc.mxt.Lock()
-	sc.WasFound[URL] = found
-	sc.mxt.Unlock()
+	sc.writeToMap(URL, found)
 	return
 }
 
