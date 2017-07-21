@@ -1,4 +1,4 @@
-// Package search searches for a keyword within the html of pages concurrently
+// Package search searches for a keyword within the html of pages (safe for concurrent use)
 package search
 
 import (
