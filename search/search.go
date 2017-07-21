@@ -171,7 +171,9 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 // MapToIOReaderWriter converts the map of urls: bool to an io.Reader so that the end user can decide how they want that data
 // csv, text, etc
 func (sc *Scanner) MapToIOReaderWriter() (io.Reader, error) {
+	sc.mxt.Lock()
 	b, err := json.Marshal(sc.WasFound)
+	sc.mxt.Unlock()
 	if err != nil {
 		if sc.logging {
 			log.Error(err)
