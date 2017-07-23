@@ -96,7 +96,7 @@ func normalizeURL(URL string) (s string, err error) {
 
 	u, err := url.Parse(URL)
 	if err != nil {
-		return
+		return s, err
 	}
 
 	scheme := u.Scheme

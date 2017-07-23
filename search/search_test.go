@@ -8,6 +8,32 @@ import (
 	"testing"
 )
 
+func TestSortInterface(t *testing.T) {
+	r := Results{Result{}, Result{}, Result{}}
+	if r.Len() != len(r) {
+		t.Errorf("lengths should be the same. Got %d wanted: %d", r.Len(), len(r))
+	}
+
+	if r.Less(0, 1) {
+		t.Errorf("Less should be false because the elements are the same")
+	}
+
+	r.Swap(0, 1)
+	if r[0] != r[1] {
+		t.Errorf("elements are should be the same same")
+	}
+
+	r = Results{Result{URL: "blah"}, Result{URL: "bah"}, Result{}}
+	if !r.Less(1, 0) {
+		t.Errorf("Less should be true bah is les than blah")
+	}
+
+	r.Swap(0, 1)
+	if r[0] == r[1] {
+		t.Errorf("elements are should be the aren't the same")
+	}
+}
+
 func TestNormalizeURL(t *testing.T) {
 	var cases = []struct {
 		In  string
@@ -135,4 +161,18 @@ func TestResultsToReader(t *testing.T) {
 	if len(b) == 0 {
 		t.Errorf("bytes should not be 0")
 	}
+}
+
+func TestGetResults(t *testing.T) {
+	var results Results
+	sc := NewScanner(1, false)
+	if len(results) != len(sc.GetResults()) {
+		t.Errorf("length of results should be equal to length sc.GetResults()")
+	}
+}
+
+func TestLogging(t *testing.T) {
+	sc := NewScanner(1, true)
+	sc.Search("facebook.com", "sign up")
+	sc.SearchWithRegx("facebook.com", regexp.MustCompile("(?i)sign up"))
 }
