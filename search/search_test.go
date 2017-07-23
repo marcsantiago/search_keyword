@@ -88,6 +88,32 @@ func TestNormalizeURLEmpty(t *testing.T) {
 	}
 }
 
+func TestNormalizeBadURL(t *testing.T) {
+	var cases = []struct {
+		In  string
+		Out string
+	}{
+		{"%2i23jr93udn.com", ""},
+	}
+
+	for _, c := range cases {
+		_, err := normalizeURL(c.In)
+		if err == nil {
+			t.Errorf("This should have failed with the error invalid URL escape")
+		}
+		sc := NewScanner(1, false)
+		err = sc.Search(c.In, "blah")
+		if err == nil {
+			t.Errorf("This should have failed with the error invalid URL escape")
+		}
+
+		err = sc.SearchWithRegx(c.In, regexp.MustCompile("blah"))
+		if err == nil {
+			t.Errorf("This should have failed with the error invalid URL escape")
+		}
+	}
+}
+
 func TestNewBufferPool(t *testing.T) {
 	limit := 10
 	pool := newbufferPool(limit)
@@ -126,8 +152,18 @@ func TestScanner(t *testing.T) {
 		t.Errorf("the map should only have one value in it, found %d", len(sc.results))
 	}
 
-	err = sc.Search("facebook.com/", "candyland")
+	err = sc.Search("facebook.com/", "(?i)Connect with friends")
 	if err != nil {
+		t.Error(err)
+	}
+
+	err = sc.Search("thissiteshouldnotexist.com/", "(?i)Connect with friends")
+	if err == nil {
+		t.Error(err)
+	}
+
+	err = sc.SearchWithRegx("thissiteshouldnotexist.com/", regexp.MustCompile("(?i)Connect with friends"))
+	if err == nil {
 		t.Error(err)
 	}
 }
