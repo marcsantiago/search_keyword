@@ -7,20 +7,90 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"sort"
 	"strings"
 	"sync"
 
 	"./search"
 
+	"github.com/fatih/color"
 	log "github.com/sirupsen/logrus"
 )
+
+var errColor = color.New(color.FgRed).SprintFunc()
+
+func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
+	var wg sync.WaitGroup
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
+	for _, f := range files {
+		name := f.Name()
+		p := path.Join(dir, name)
+		fmt.Println(p)
+
+		// avoid .DS_Store and like files
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+
+		file, err := os.Open(p)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
+
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			wg.Add(1)
+			go scan(scanner.Text(), keyword, &wg, sc)
+		}
+
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+	}
+	wg.Wait()
+	return
+}
+
+func readFromFile(path, keyword string, sc *search.Scanner) (err error) {
+	var wg sync.WaitGroup
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		wg.Add(1)
+		go scan(scanner.Text(), keyword, &wg, sc)
+	}
+	if err = scanner.Err(); err != nil {
+		return
+	}
+	wg.Wait()
+	return
+}
+
+func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
+	defer wg.Done()
+	parts := strings.Split(line, ",")
+	URL := strings.Replace(parts[1], "\"", "", -1)
+	err := sc.Search(URL, keyword)
+	if err != nil {
+		log.Errorf("%s", errColor(err))
+	}
+}
 
 // this particular main function is written in such a way to satisfy
 // the questions requirement, however the package search was written to
 // be more generic
 func main() {
-	inputFile := flag.String("in", "", "the input file path containing the list of urls")
+	inputFile := flag.String("in", "", "the input file path containing the list of urls or folder path containing files pointing to urls")
 	outFile := flag.String("out", "", "output file path")
 	keyword := flag.String("keyword", "", "keyword to search for")
 	limit := flag.Int("limit", 20, "set the limit of goroutines to spin up")
@@ -41,41 +111,28 @@ func main() {
 		log.Fatal("keyword cannot be empty")
 	}
 
-	file, err := os.Open(*inputFile)
+	fi, err := os.Stat(*inputFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
 
-	var wg sync.WaitGroup
-	sc := search.NewScanner(*limit, true)
+	sc := search.NewScanner(*limit, false)
 
-	// reading file line by line, no need to store whole file in mem
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		wg.Add(1)
-		line := scanner.Text()
-		// for this particular example urls are stored in a file like so
-		// 1,"facebook.com/",9616487,1688316928,9.54,9.34
-		// so I'm going to parse that file to get the url
-		go func(line string, wg *sync.WaitGroup, sc *search.Scanner) {
-			defer wg.Done()
-			parts := strings.Split(line, ",")
-			URL := strings.Replace(parts[1], "\"", "", -1)
-			err := sc.Search(URL, *keyword)
-			if err != nil {
-				log.Warningf("%s had and issue %v\n", URL, err)
-			}
-		}(line, &wg, sc)
+	switch mode := fi.Mode(); {
+	case mode.IsDir():
+		err := readFromDirectory(*inputFile, *keyword, sc)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case mode.IsRegular():
+		err := readFromFile(*inputFile, *keyword, sc)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-	wg.Wait()
 
 	var buf bytes.Buffer
-	header := fmt.Sprintf("search for keyword %s\nurl,found\n", *keyword)
+	header := fmt.Sprintf("search for keyword %s\nurl,found,context\n", *keyword)
 	_, err = buf.WriteString(header)
 	if err != nil {
 		log.Warning("Buffer could not write initial string")
@@ -85,7 +142,7 @@ func main() {
 	// sorting the slice for easier viewing
 	sort.Sort(res)
 	for _, r := range res {
-		line := fmt.Sprintf("%s, %v\n", r.URL, r.Found)
+		line := fmt.Sprintf("%s, %v, %s\n", r.URL, r.Found, r.Context)
 		_, err = buf.WriteString(line)
 		if err != nil {
 			log.Warningf("couldn't write string %s", line)

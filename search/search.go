@@ -13,14 +13,34 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
+
 	log "github.com/sirupsen/logrus"
 )
+
+// func init() {
+// 	// Log as JSON instead of the default ASCII formatter.
+// 	log.SetFormatter(&log.JSONFormatter{})
+
+// 	// Output to stdout instead of the default stderr
+// 	// Can be any io.Writer, see below for File example
+// 	log.SetOutput(os.Stdout)
+
+// 	// Only log the warning severity or above.
+// 	log.SetLevel(log.WarnLevel)
+// }
 
 var (
 	// ErrURLEmpty to warn users that they passed an empty string in
 	ErrURLEmpty = fmt.Errorf("the url string is empty")
 	// ErrDomainMissing domain was missing from the url
 	ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
+	// ErrUnresolvedOrTimedOut ...
+	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timeout")
+
+	searchTermColor = color.New(color.FgGreen).SprintFunc()
+	foundColor      = color.New(color.FgGreen).SprintFunc()
+	notFoundColor   = color.New(color.FgRed).SprintFunc()
 )
 
 // bufferPool maintains byte buffers used to read html content
@@ -56,7 +76,8 @@ type Result struct {
 	// URL is the url passed in
 	URL string
 	// Found determines whether or not the keyword was matched on the page
-	Found bool
+	Found   bool
+	Context string
 }
 
 // Results is the plural of results which implements the Sort interface. Sorting by URL.  If the slice needs to be sorted then the user can call sort.Sort
@@ -135,9 +156,14 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 	}
 }
 
-func (sc *Scanner) writeToMap(URL string, keyword interface{}, found bool) {
+func (sc *Scanner) writeToMap(URL string, keyword interface{}, found bool, chunk string) {
 	sc.mxt.Lock()
-	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword})
+	if found {
+		log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
+	} else {
+		log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), notFoundColor("not found"), URL)
+	}
+	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
 	sc.mxt.Unlock()
 	return
 }
@@ -184,9 +210,9 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, keyword, false)
+				sc.writeToMap(URL, keyword, false, "")
 			}
-			return err
+			return ErrUnresolvedOrTimedOut
 		}
 	}
 	defer res.Body.Close()
@@ -195,8 +221,16 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	defer sc.buffer.Put(buf)
 	io.Copy(buf, res.Body)
 
-	found := searchRegex.Match(buf.Bytes())
-	sc.writeToMap(URL, keyword, found)
+	b := buf.Bytes()
+	found := searchRegex.Match(b)
+	startindex := searchRegex.FindIndex(b) //I'm only going to care about the first index
+	var chunk string
+	if len(startindex) > 0 {
+		endIndex := startindex[0] + len(keyword) + 100
+		chunk = strings.Replace(string(b[startindex[0]:endIndex]), "\n", " ", -1)
+	}
+
+	sc.writeToMap(URL, keyword, found, chunk)
 	return
 }
 
@@ -234,7 +268,7 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, keyword, false)
+				sc.writeToMap(URL, keyword, false, "")
 			}
 			return err
 		}
@@ -246,7 +280,7 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	io.Copy(buf, res.Body)
 
 	found := keyword.Match(buf.Bytes())
-	sc.writeToMap(URL, keyword, found)
+	sc.writeToMap(URL, keyword, found, "")
 	return
 }
 

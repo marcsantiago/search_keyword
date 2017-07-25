@@ -101,7 +101,7 @@ func TestNormalizeBadURL(t *testing.T) {
 		if err == nil {
 			t.Errorf("This should have failed with the error invalid URL escape")
 		}
-		sc := NewScanner(1, false)
+		sc := NewScanner(1, true)
 		err = sc.Search(c.In, "blah")
 		if err == nil {
 			t.Errorf("This should have failed with the error invalid URL escape")
@@ -142,7 +142,7 @@ func TestNewBufferPool(t *testing.T) {
 }
 
 func TestScanner(t *testing.T) {
-	sc := NewScanner(1, false)
+	sc := NewScanner(1, true)
 	err := sc.Search("facebook.com/", "Connect with friends")
 	if err != nil {
 		t.Error(err)
