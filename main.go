@@ -79,10 +79,12 @@ func readFromFile(path, keyword string, sc *search.Scanner) (err error) {
 func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
 	defer wg.Done()
 	parts := strings.Split(line, ",")
-	URL := strings.Replace(parts[1], "\"", "", -1)
-	err := sc.Search(URL, keyword)
-	if err != nil {
-		log.Errorf("%s", errColor(err))
+	if len(parts) > 0 {
+		URL := strings.Replace(parts[1], "\"", "", -1)
+		err := sc.Search(URL, keyword)
+		if err != nil {
+			log.Errorf("%s", errColor(err))
+		}
 	}
 }
 
@@ -138,6 +140,8 @@ func main() {
 		log.Warning("Buffer could not write initial string")
 	}
 
+	// USING A CHANNEL INSTEAD, BELOW IS AN EXAMPLE OF HOW
+	// THE PROGRAM WOULD WORK IF nil WAS PASSED INSTEAD OF A CHANNEL
 	res := sc.GetResults()
 	// sorting the slice for easier viewing
 	sort.Sort(res)
@@ -152,4 +156,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 }

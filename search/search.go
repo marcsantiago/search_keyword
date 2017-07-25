@@ -18,18 +18,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// func init() {
-// 	// Log as JSON instead of the default ASCII formatter.
-// 	log.SetFormatter(&log.JSONFormatter{})
-
-// 	// Output to stdout instead of the default stderr
-// 	// Can be any io.Writer, see below for File example
-// 	log.SetOutput(os.Stdout)
-
-// 	// Only log the warning severity or above.
-// 	log.SetLevel(log.WarnLevel)
-// }
-
 var (
 	// ErrURLEmpty to warn users that they passed an empty string in
 	ErrURLEmpty = fmt.Errorf("the url string is empty")
@@ -41,6 +29,7 @@ var (
 	searchTermColor = color.New(color.FgGreen).SprintFunc()
 	foundColor      = color.New(color.FgGreen).SprintFunc()
 	notFoundColor   = color.New(color.FgRed).SprintFunc()
+	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
 )
 
 // bufferPool maintains byte buffers used to read html content
@@ -156,7 +145,7 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 	}
 }
 
-func (sc *Scanner) writeToMap(URL string, keyword interface{}, found bool, chunk string) {
+func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk string) {
 	sc.mxt.Lock()
 	if found {
 		log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
@@ -187,11 +176,13 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	}
 
 	// not assuming a regex pattern will be passed
-	var searchRegex *regexp.Regexp
+	var searchRegex, contextRegex *regexp.Regexp
 	if strings.Contains(keyword, "(?i)") {
 		searchRegex = regexp.MustCompile(keyword)
+		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", strings.Replace(keyword, "(?i)", "", 1)))
 	} else {
 		searchRegex = regexp.MustCompile("(?i)" + keyword)
+		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
 	}
 
 	var client = &http.Client{
@@ -210,7 +201,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, keyword, false, "")
+				sc.saveResult(URL, keyword, false, "")
 			}
 			return ErrUnresolvedOrTimedOut
 		}
@@ -223,14 +214,11 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 
 	b := buf.Bytes()
 	found := searchRegex.Match(b)
-	startindex := searchRegex.FindIndex(b) //I'm only going to care about the first index
-	var chunk string
-	if len(startindex) > 0 {
-		endIndex := startindex[0] + len(keyword) + 100
-		chunk = strings.Replace(string(b[startindex[0]:endIndex]), "\n", " ", -1)
+	var context string
+	if found {
+		context = newLineReplacer.Replace(string(contextRegex.Find(b)))
 	}
-
-	sc.writeToMap(URL, keyword, found, chunk)
+	sc.saveResult(URL, keyword, found, context)
 	return
 }
 
@@ -268,7 +256,7 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 				if sc.logging {
 					log.Errorf("%v https failed also", err)
 				}
-				sc.writeToMap(URL, keyword, false, "")
+				sc.saveResult(URL, keyword, false, "")
 			}
 			return err
 		}
@@ -279,8 +267,14 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	defer sc.buffer.Put(buf)
 	io.Copy(buf, res.Body)
 
-	found := keyword.Match(buf.Bytes())
-	sc.writeToMap(URL, keyword, found, "")
+	b := buf.Bytes()
+	found := keyword.Match(b)
+	var context string
+	if found {
+		contextRegex := regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
+		context = newLineReplacer.Replace(string(contextRegex.Find(b)))
+	}
+	sc.saveResult(URL, keyword, found, context)
 	return
 }
 
