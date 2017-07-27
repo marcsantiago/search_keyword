@@ -36,81 +36,33 @@ func TestSortInterface(t *testing.T) {
 
 func TestNormalizeURL(t *testing.T) {
 	var cases = []struct {
-		In  string
-		Out string
+		Name string
+		In   string
+		Out  string
 	}{
-		{"facebook.com/", "http://facebook.com"},
-		{"http://facebook.com/", "http://facebook.com"},
-		{"https://facebook.com/", "https://facebook.com"},
-		{"", ""},
-		{"facebook", ""},
-		{"https://en.wikipedia.org/wiki/Email_address", "https://en.wikipedia.org/wiki/Email_address"},
+		{"no protocol", "facebook.com/", "http://facebook.com"},
+		{"http protocol", "http://facebook.com/", "http://facebook.com"},
+		{"https protocol", "https://facebook.com/", "https://facebook.com"},
+		{"empty", "", ErrURLEmpty.Error()},
+		{"no domain", "http://facebook", ErrDomainMissing.Error()},
+		{"no domain or protocol", "facebook", ErrDomainMissing.Error()},
+		{"long path", "https://en.wikipedia.org/wiki/Email_address", "https://en.wikipedia.org/wiki/Email_address"},
+		{"bad url formating", "%2i23jr93udn.com", "parse %2i23jr93udn.com: invalid URL escape \"%2i\""},
 	}
 
 	for i, c := range cases {
-		out, _ := normalizeURL(c.In)
-
-		if c.Out != out {
-			t.Errorf("test %d failed. Excepted %s got %s", i, c.Out, out)
-		}
-	}
-}
-
-func TestNormalizeURLDomainMissing(t *testing.T) {
-	var cases = []struct {
-		In  string
-		Out string
-	}{
-		{"facebook", ""},
-	}
-
-	for _, c := range cases {
-		_, err := normalizeURL(c.In)
-		if err != ErrDomainMissing {
-			t.Errorf("err got: %v wanted: %v", err, ErrDomainMissing)
-		}
-	}
-}
-
-func TestNormalizeURLEmpty(t *testing.T) {
-	var cases = []struct {
-		In  string
-		Out string
-	}{
-		{"", ""},
-	}
-
-	for _, c := range cases {
-		_, err := normalizeURL(c.In)
-		if err != ErrURLEmpty {
-			t.Errorf("err got: %v wanted: %v", err, ErrDomainMissing)
-		}
-	}
-}
-
-func TestNormalizeBadURL(t *testing.T) {
-	var cases = []struct {
-		In  string
-		Out string
-	}{
-		{"%2i23jr93udn.com", ""},
-	}
-
-	for _, c := range cases {
-		_, err := normalizeURL(c.In)
-		if err == nil {
-			t.Errorf("This should have failed with the error invalid URL escape")
-		}
-		sc := NewScanner(1, true)
-		err = sc.Search(c.In, "blah")
-		if err == nil {
-			t.Errorf("This should have failed with the error invalid URL escape")
-		}
-
-		err = sc.SearchWithRegx(c.In, regexp.MustCompile("blah"))
-		if err == nil {
-			t.Errorf("This should have failed with the error invalid URL escape")
-		}
+		t.Run(c.Name, func(t *testing.T) {
+			out, err := normalizeURL(c.In)
+			if err == nil {
+				if c.Out != out {
+					t.Fatalf("test %d failed. expected %s got %s", i, c.Out, out)
+				}
+			} else {
+				if c.Out != err.Error() {
+					t.Fatalf("test %d failed. expected %s got %v", i, c.Out, err)
+				}
+			}
+		})
 	}
 }
 
