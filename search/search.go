@@ -96,6 +96,9 @@ type Scanner struct {
 	logging bool
 	// used internally to lock writing to the map
 	mxt sync.Mutex
+
+	// used to turn off logging in testing
+	testing bool
 }
 
 func normalizeURL(URL string) (s string, err error) {
@@ -147,11 +150,14 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 
 func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk string) {
 	sc.mxt.Lock()
-	if found {
-		log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
-	} else {
-		log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), notFoundColor("not found"), URL)
+	if sc.testing {
+		if found {
+			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
+		} else {
+			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), notFoundColor("not found"), URL)
+		}
 	}
+
 	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
 	sc.mxt.Unlock()
 	return
