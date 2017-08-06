@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/fatih/color"
 
 	log "github.com/sirupsen/logrus"
@@ -26,11 +27,16 @@ var (
 	// ErrUnresolvedOrTimedOut ...
 	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timeout")
 
+	// EmailRegex provides a base email regex for scraping emails
+	EmailRegex = regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
+
 	searchTermColor = color.New(color.FgGreen).SprintFunc()
 	foundColor      = color.New(color.FgGreen).SprintFunc()
 	notFoundColor   = color.New(color.FgRed).SprintFunc()
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
 )
+
+const depthLimit = 5
 
 // bufferPool maintains byte buffers used to read html content
 type bufferPool struct {
@@ -66,7 +72,7 @@ type Result struct {
 	URL string
 	// Found determines whether or not the keyword was matched on the page
 	Found   bool
-	Context string
+	Context interface{}
 }
 
 // Results is the plural of results which implements the Sort interface. Sorting by URL.  If the slice needs to be sorted then the user can call sort.Sort
@@ -99,6 +105,36 @@ type Scanner struct {
 
 	// used to turn off logging in testing
 	testing bool
+}
+
+func inSlice(tar string, s []string) bool {
+	for _, i := range s {
+		if tar == i {
+			return true
+		}
+	}
+	return false
+}
+
+func linksToCheck(baseURL string, limit int) (moreURLS []string) {
+	moreURLS = []string{baseURL}
+	doc, err := goquery.NewDocument(baseURL)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	doc.Find("body a").Each(func(index int, item *goquery.Selection) {
+		link, _ := item.Attr("href")
+		if strings.Contains(link, baseURL) {
+			if !inSlice(link, moreURLS) {
+				moreURLS = append(moreURLS, link)
+			}
+		}
+		if len(moreURLS) >= limit {
+			return
+		}
+	})
+	return
 }
 
 func normalizeURL(URL string) (s string, err error) {
@@ -148,7 +184,7 @@ func NewScanner(limit int, enableLogging bool) *Scanner {
 	}
 }
 
-func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk string) {
+func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
 	sc.mxt.Lock()
 	if sc.testing {
 		if found {
@@ -169,10 +205,6 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	sc.sema <- struct{}{}
 	defer func() { <-sc.sema }()
 
-	if sc.logging {
-		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
-	}
-
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
@@ -192,39 +224,123 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	}
 
 	var client = &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: time.Second * 5,
 	}
 
-	res, err := client.Get(URL)
+	urls := linksToCheck(URL, depthLimit)
+	for _, url := range urls {
+		if sc.logging {
+			log.Infof("looking for the keyword %s in the url %s\n", keyword, url)
+		}
+		res, err := client.Get(url)
+		if err != nil {
+			if sc.logging {
+				log.Errorf("%v trying with https", err)
+			}
+			if !strings.Contains(url, "https:") {
+				url = strings.Replace(url, "http", "https", -1)
+				res, err = client.Get(url)
+				if err != nil {
+					if sc.logging {
+						log.Errorf("%v https failed also", err)
+					}
+					sc.saveResult(url, keyword, false, "")
+				}
+				return ErrUnresolvedOrTimedOut
+			}
+		}
+		defer res.Body.Close()
+
+		buf := sc.buffer.Get()
+		defer sc.buffer.Put(buf)
+		io.Copy(buf, res.Body)
+
+		b := buf.Bytes()
+		found := searchRegex.Match(b)
+		var context string
+		if found {
+			context = newLineReplacer.Replace(string(contextRegex.Find(b)))
+		}
+		sc.saveResult(url, keyword, found, context)
+	}
+
+	return
+}
+
+// SearchForEmail returns possible emails from the source pages.  If you do not provide a regex it will use the default value
+// defined in the var EmailRegex, if you wish to filter finds, add a filter slice otherwise everything is can find will be dumped
+func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters []string) (err error) {
+	if emailRegex == nil {
+		emailRegex = EmailRegex
+	}
+
+	// make sure to use the semaphore we've defined
+	sc.sema <- struct{}{}
+	defer func() { <-sc.sema }()
+
+	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Errorf("%v trying with https", err)
+			log.Error(err)
 		}
-		if !strings.Contains(URL, "https:") {
-			URL = strings.Replace(URL, "http", "https", -1)
-			res, err = client.Get(URL)
-			if err != nil {
-				if sc.logging {
-					log.Errorf("%v https failed also", err)
-				}
-				sc.saveResult(URL, keyword, false, "")
+		return err
+	}
+
+	var client = &http.Client{
+		Timeout: time.Second * 5,
+	}
+
+	urls := linksToCheck(URL, depthLimit)
+	for _, url := range urls {
+		if sc.logging {
+			log.Infof("looking for the a email in %s\n", url)
+		}
+		res, err := client.Get(url)
+		if err != nil {
+			if sc.logging {
+				log.Errorf("%v trying with https", err)
 			}
-			return ErrUnresolvedOrTimedOut
+			if !strings.Contains(url, "https:") {
+				url = strings.Replace(url, "http", "https", -1)
+				res, err = client.Get(url)
+				if err != nil {
+					if sc.logging {
+						log.Errorf("%v https failed also", err)
+					}
+					sc.saveResult(url, "", false, "")
+				}
+				return ErrUnresolvedOrTimedOut
+			}
 		}
-	}
-	defer res.Body.Close()
+		defer res.Body.Close()
 
-	buf := sc.buffer.Get()
-	defer sc.buffer.Put(buf)
-	io.Copy(buf, res.Body)
+		buf := sc.buffer.Get()
+		defer sc.buffer.Put(buf)
+		io.Copy(buf, res.Body)
 
-	b := buf.Bytes()
-	found := searchRegex.Match(b)
-	var context string
-	if found {
-		context = newLineReplacer.Replace(string(contextRegex.Find(b)))
+		emails := emailRegex.FindStringSubmatch(buf.String())
+		var clean []string
+		found := false
+		if len(emails) > 0 {
+			found = true
+
+			for _, e := range emails {
+				if len(filters) > 0 {
+					for _, f := range filters {
+						if !strings.Contains(e, f) && !inSlice(e, clean) && len(e) > 1 {
+							clean = append(clean, e)
+						}
+					}
+				} else {
+					if len(e) > 1 && !inSlice(e, clean) {
+						clean = append(clean, e)
+					}
+				}
+
+			}
+		}
+		sc.saveResult(url, "", found, clean)
 	}
-	sc.saveResult(URL, keyword, found, context)
 	return
 }
 

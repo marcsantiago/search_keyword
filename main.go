@@ -1,3 +1,4 @@
+// This is an example of how to use the parser. There are many more functions within the package that aren't being used here.
 package main
 
 import (
@@ -30,7 +31,6 @@ func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 	for _, f := range files {
 		name := f.Name()
 		p := path.Join(dir, name)
-		fmt.Println(p)
 
 		// avoid .DS_Store and like files
 		if strings.HasPrefix(name, ".") {
@@ -118,7 +118,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	sc := search.NewScanner(*limit, false)
+	sc := search.NewScanner(*limit, true)
 
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
@@ -139,6 +139,7 @@ func main() {
 	if err != nil {
 		log.Warning("Buffer could not write initial string")
 	}
+	log.Info("Sorting and writing results...")
 
 	// USING A CHANNEL INSTEAD, BELOW IS AN EXAMPLE OF HOW
 	// THE PROGRAM WOULD WORK IF nil WAS PASSED INSTEAD OF A CHANNEL
@@ -146,7 +147,7 @@ func main() {
 	// sorting the slice for easier viewing
 	sort.Sort(res)
 	for _, r := range res {
-		line := fmt.Sprintf("%s, %v, %s\n", r.URL, r.Found, r.Context)
+		line := fmt.Sprintf("%s, %v, %v\n", r.URL, r.Found, r.Context)
 		_, err = buf.WriteString(line)
 		if err != nil {
 			log.Warningf("couldn't write string %s", line)

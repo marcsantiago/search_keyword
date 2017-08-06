@@ -2,6 +2,7 @@ package search
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"regexp"
 	"sync"
@@ -129,6 +130,16 @@ func TestScannerRegx(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+}
+
+func TestSearchForEmailx(t *testing.T) {
+	sc := NewScanner(1, false)
+	sc.testing = true
+	err := sc.SearchForEmail("https://en.wikipedia.org/wiki/Email_address", nil, nil)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Printf("%+v\n", sc.GetResults())
 }
 
 func TestResultsToReader(t *testing.T) {
