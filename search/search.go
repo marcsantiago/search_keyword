@@ -15,8 +15,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/fatih/color"
-
-	log "github.com/sirupsen/logrus"
+	log "github.com/marcsantiago/logger"
 )
 
 var (
@@ -34,6 +33,7 @@ var (
 	foundColor      = color.New(color.FgGreen).SprintFunc()
 	notFoundColor   = color.New(color.FgRed).SprintFunc()
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
+	logkey          = "Scanner"
 )
 
 const depthLimit = 5
@@ -120,7 +120,7 @@ func linksToCheck(baseURL string, limit int) (moreURLS []string) {
 	moreURLS = []string{baseURL}
 	doc, err := goquery.NewDocument(baseURL)
 	if err != nil {
-		log.Error(err)
+		log.Error(logkey, "could not create doc", "error", err)
 		return
 	}
 	doc.Find("body a").Each(func(index int, item *goquery.Selection) {
@@ -188,9 +188,9 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 	sc.mxt.Lock()
 	if sc.testing {
 		if found {
-			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
+			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", foundColor("yes"), "url", URL)
 		} else {
-			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), notFoundColor("not found"), URL)
+			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", notFoundColor("no"), "url", URL)
 		}
 	}
 
@@ -208,7 +208,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize url", "error", err)
 		}
 		return err
 	}
@@ -230,19 +230,20 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	urls := linksToCheck(URL, depthLimit)
 	for _, url := range urls {
 		if sc.logging {
-			log.Infof("looking for the keyword %s in the url %s\n", keyword, url)
+			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
 		}
 		res, err := client.Get(url)
 		if err != nil {
 			if sc.logging {
-				log.Errorf("%v trying with https", err)
+				log.Error(logkey, "http failed", "error", err)
 			}
+
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", -1)
 				res, err = client.Get(url)
 				if err != nil {
 					if sc.logging {
-						log.Errorf("%v https failed also", err)
+						log.Error(logkey, "https failed", "error", err)
 					}
 					sc.saveResult(url, keyword, false, "")
 				}
@@ -264,7 +265,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		sc.saveResult(url, keyword, found, context)
 	}
 
-	return
+	return nil
 }
 
 // SearchForEmail returns possible emails from the source pages.  If you do not provide a regex it will use the default value
@@ -281,7 +282,7 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize URL", "error", err)
 		}
 		return err
 	}
@@ -293,19 +294,19 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	urls := linksToCheck(URL, depthLimit)
 	for _, url := range urls {
 		if sc.logging {
-			log.Infof("looking for the a email in %s\n", url)
+			log.Info(logkey, "Looking for the a email", "url", url)
 		}
 		res, err := client.Get(url)
 		if err != nil {
 			if sc.logging {
-				log.Errorf("%v trying with https", err)
+				log.Info(logkey, "Trying with https", "error", err)
 			}
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", -1)
 				res, err = client.Get(url)
 				if err != nil {
 					if sc.logging {
-						log.Errorf("%v https failed also", err)
+						log.Error(logkey, "https failed also", "error", err)
 					}
 					sc.saveResult(url, "", false, "")
 				}
@@ -351,13 +352,13 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	defer func() { <-sc.sema }()
 
 	if sc.logging {
-		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
+		log.Info(logkey, "Looking for the keyword", "keyword", keyword, "url", URL)
 	}
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize urk", "error", err)
 		}
 		return err
 	}
@@ -369,14 +370,14 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	res, err := client.Get(URL)
 	if err != nil {
 		if sc.logging {
-			log.Errorf("%v trying with https", err)
+			log.Info(logkey, "Trying with https", "error", err)
 		}
 		if !strings.Contains(URL, "https:") {
 			URL = strings.Replace(URL, "http", "https", -1)
 			res, err = client.Get(URL)
 			if err != nil {
 				if sc.logging {
-					log.Errorf("%v https failed also", err)
+					log.Error(logkey, "https failed also", "error", err)
 				}
 				sc.saveResult(URL, keyword, false, "")
 			}
@@ -406,7 +407,7 @@ func (sc *Scanner) ResultsToReader() (io.Reader, error) {
 	b, err := json.Marshal(sc.results)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not marshal data", "error", err)
 		}
 		return nil, err
 	}

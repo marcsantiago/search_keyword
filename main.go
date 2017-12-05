@@ -13,11 +13,13 @@ import (
 	"strings"
 	"sync"
 
-	"./search"
+	"github.com/marcsantiago/search_keyword/search"
 
 	"github.com/fatih/color"
-	log "github.com/sirupsen/logrus"
+	log "github.com/marcsantiago/logger"
 )
+
+const logKey = "Main Search"
 
 var errColor = color.New(color.FgRed).SprintFunc()
 
@@ -39,7 +41,7 @@ func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 
 		file, err := os.Open(p)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(logKey, "Couldn't open file", "error", err)
 		}
 		defer file.Close()
 
@@ -83,7 +85,7 @@ func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
 		URL := strings.Replace(parts[1], "\"", "", -1)
 		err := sc.Search(URL, keyword)
 		if err != nil {
-			log.Errorf("%s", errColor(err))
+			log.Error(logKey, "Search error", "error", errColor(err))
 		}
 	}
 }
@@ -100,22 +102,22 @@ func main() {
 
 	if *inputFile == "" {
 		flag.PrintDefaults()
-		log.Fatal("input file path cannot be empty")
+		log.Fatal(logKey, "Input file path cannot be empty")
 	}
 
 	if *outFile == "" {
 		flag.PrintDefaults()
-		log.Fatal("out file path cannot be empty")
+		log.Fatal(logKey, "Out file path cannot be empty")
 	}
 
 	if *keyword == "" {
 		flag.PrintDefaults()
-		log.Fatal("keyword cannot be empty")
+		log.Fatal(logKey, "Keyword cannot be empty")
 	}
 
 	fi, err := os.Stat(*inputFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(logKey, "Os.Stat", "error", err)
 	}
 
 	sc := search.NewScanner(*limit, true)
@@ -124,12 +126,12 @@ func main() {
 	case mode.IsDir():
 		err := readFromDirectory(*inputFile, *keyword, sc)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(logKey, "Could not read from directory", "error", err)
 		}
 	case mode.IsRegular():
 		err := readFromFile(*inputFile, *keyword, sc)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal(logKey, "Could not read from file", "error", err)
 		}
 	}
 
@@ -137,9 +139,9 @@ func main() {
 	header := fmt.Sprintf("search for keyword %s\nurl,found,context\n", *keyword)
 	_, err = buf.WriteString(header)
 	if err != nil {
-		log.Warning("Buffer could not write initial string")
+		log.Error(logKey, "Buffer could not write initial string")
 	}
-	log.Info("Sorting and writing results...")
+	log.Info(logKey, "Sorting and writing results...")
 
 	// USING A CHANNEL INSTEAD, BELOW IS AN EXAMPLE OF HOW
 	// THE PROGRAM WOULD WORK IF nil WAS PASSED INSTEAD OF A CHANNEL
@@ -150,12 +152,12 @@ func main() {
 		line := fmt.Sprintf("%s, %v, %v\n", r.URL, r.Found, r.Context)
 		_, err = buf.WriteString(line)
 		if err != nil {
-			log.Warningf("couldn't write string %s", line)
+			log.Error(logKey, "Couldn't write string", "message", line)
 		}
 	}
 	err = ioutil.WriteFile(*outFile, buf.Bytes(), 0644)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(logKey, "Couldn't write file", "error", err)
 	}
 
 }
