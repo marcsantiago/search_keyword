@@ -15,8 +15,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/fatih/color"
-
-	log "github.com/sirupsen/logrus"
+	log "github.com/marcsantiago/logger"
 )
 
 var (
@@ -34,9 +33,8 @@ var (
 	foundColor      = color.New(color.FgGreen).SprintFunc()
 	notFoundColor   = color.New(color.FgRed).SprintFunc()
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
+	logkey          = "Scanner"
 )
-
-const depthLimit = 5
 
 // bufferPool maintains byte buffers used to read html content
 type bufferPool struct {
@@ -93,7 +91,7 @@ func (slice Results) Swap(i, j int) {
 // Scanner is the basic structure used to interact with the html content of the page
 type Scanner struct {
 	// sema is used to limit the number of goroutines spinning up
-	sema chan struct{}
+	sema sema
 	// results is a slice of result
 	results Results
 	// buffer used to read html content
@@ -102,9 +100,20 @@ type Scanner struct {
 	logging bool
 	// used internally to lock writing to the map
 	mxt sync.Mutex
-
+	// used to define depth of search
+	depthLimit int
 	// used to turn off logging in testing
 	testing bool
+}
+
+type sema chan struct{}
+
+func (s sema) release() {
+	<-s
+}
+
+func (s sema) load() {
+	s <- struct{}{}
 }
 
 func inSlice(tar string, s []string) bool {
@@ -118,9 +127,13 @@ func inSlice(tar string, s []string) bool {
 
 func linksToCheck(baseURL string, limit int) (moreURLS []string) {
 	moreURLS = []string{baseURL}
+	if limit == 0 {
+		return
+	}
+
 	doc, err := goquery.NewDocument(baseURL)
 	if err != nil {
-		log.Error(err)
+		log.Error(logkey, "Could not create doc", "error", err)
 		return
 	}
 	doc.Find("body a").Each(func(index int, item *goquery.Selection) {
@@ -176,11 +189,12 @@ func normalizeURL(URL string) (s string, err error) {
 }
 
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
-func NewScanner(limit int, enableLogging bool) *Scanner {
+func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 	return &Scanner{
-		sema:    make(chan struct{}, limit),
-		logging: enableLogging,
-		buffer:  newbufferPool(limit / 2),
+		depthLimit: depthLimit,
+		sema:       make(sema, concurrentLimit),
+		logging:    enableLogging,
+		buffer:     newbufferPool(concurrentLimit / 2),
 	}
 }
 
@@ -188,9 +202,9 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 	sc.mxt.Lock()
 	if sc.testing {
 		if found {
-			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), foundColor("found"), URL)
+			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", foundColor("yes"), "url", URL)
 		} else {
-			log.Printf("The search term %s was %s in the url %s ", searchTermColor(keyword), notFoundColor("not found"), URL)
+			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", notFoundColor("no"), "url", URL)
 		}
 	}
 
@@ -201,14 +215,13 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 
 // Search looks for the passed keyword in the html respose
 func (sc *Scanner) Search(URL, keyword string) (err error) {
-	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize url", "error", err)
 		}
 		return err
 	}
@@ -227,22 +240,23 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		Timeout: time.Second * 5,
 	}
 
-	urls := linksToCheck(URL, depthLimit)
+	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
-			log.Infof("looking for the keyword %s in the url %s\n", keyword, url)
+			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
 		}
 		res, err := client.Get(url)
 		if err != nil {
 			if sc.logging {
-				log.Errorf("%v trying with https", err)
+				log.Error(logkey, "http failed", "error", err)
 			}
+
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", -1)
 				res, err = client.Get(url)
 				if err != nil {
 					if sc.logging {
-						log.Errorf("%v https failed also", err)
+						log.Error(logkey, "https failed", "error", err)
 					}
 					sc.saveResult(url, keyword, false, "")
 				}
@@ -264,7 +278,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		sc.saveResult(url, keyword, found, context)
 	}
 
-	return
+	return nil
 }
 
 // SearchForEmail returns possible emails from the source pages.  If you do not provide a regex it will use the default value
@@ -275,13 +289,13 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	}
 
 	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize URL", "error", err)
 		}
 		return err
 	}
@@ -290,22 +304,22 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 		Timeout: time.Second * 5,
 	}
 
-	urls := linksToCheck(URL, depthLimit)
+	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
-			log.Infof("looking for the a email in %s\n", url)
+			log.Info(logkey, "Looking for the a email", "url", url)
 		}
 		res, err := client.Get(url)
 		if err != nil {
 			if sc.logging {
-				log.Errorf("%v trying with https", err)
+				log.Info(logkey, "Trying with https", "error", err)
 			}
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", -1)
 				res, err = client.Get(url)
 				if err != nil {
 					if sc.logging {
-						log.Errorf("%v https failed also", err)
+						log.Error(logkey, "https failed also", "error", err)
 					}
 					sc.saveResult(url, "", false, "")
 				}
@@ -346,18 +360,17 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 
 // SearchWithRegx allows you to pass a regular expression i as a search paramter
 func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
-	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	if sc.logging {
-		log.Infof("looking for the keyword %s in the url %s\n", keyword, URL)
+		log.Info(logkey, "Looking for the keyword", "keyword", keyword, "url", URL)
 	}
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not normalize urk", "error", err)
 		}
 		return err
 	}
@@ -369,14 +382,14 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	res, err := client.Get(URL)
 	if err != nil {
 		if sc.logging {
-			log.Errorf("%v trying with https", err)
+			log.Info(logkey, "Trying with https", "error", err)
 		}
 		if !strings.Contains(URL, "https:") {
 			URL = strings.Replace(URL, "http", "https", -1)
 			res, err = client.Get(URL)
 			if err != nil {
 				if sc.logging {
-					log.Errorf("%v https failed also", err)
+					log.Error(logkey, "https failed also", "error", err)
 				}
 				sc.saveResult(URL, keyword, false, "")
 			}
@@ -406,7 +419,7 @@ func (sc *Scanner) ResultsToReader() (io.Reader, error) {
 	b, err := json.Marshal(sc.results)
 	if err != nil {
 		if sc.logging {
-			log.Error(err)
+			log.Error(logkey, "Could not marshal data", "error", err)
 		}
 		return nil, err
 	}
