@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,6 +20,10 @@ import (
 )
 
 var (
+	// DefaultTimeout is the duration used to determine get request timeout
+	// this is exported so that i can be changed
+	DefaultTimeout = 10 * time.Second
+
 	// ErrURLEmpty to warn users that they passed an empty string in
 	ErrURLEmpty = fmt.Errorf("the url string is empty")
 	// ErrDomainMissing domain was missing from the url
@@ -90,6 +95,8 @@ func (slice Results) Swap(i, j int) {
 
 // Scanner is the basic structure used to interact with the html content of the page
 type Scanner struct {
+	// client is used to make requests
+	client *http.Client
 	// sema is used to limit the number of goroutines spinning up
 	sema sema
 	// results is a slice of result
@@ -108,13 +115,8 @@ type Scanner struct {
 
 type sema chan struct{}
 
-func (s sema) release() {
-	<-s
-}
-
-func (s sema) load() {
-	s <- struct{}{}
-}
+func (s sema) release() { <-s }
+func (s sema) load()    { s <- struct{}{} }
 
 func inSlice(tar string, s []string) bool {
 	for _, i := range s {
@@ -191,6 +193,18 @@ func normalizeURL(URL string) (s string, err error) {
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
 func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 	return &Scanner{
+		client: &http.Client{
+			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
+				Dial: (&net.Dialer{
+					Timeout: DefaultTimeout,
+				}).Dial,
+				TLSHandshakeTimeout: DefaultTimeout,
+				MaxIdleConns:        concurrentLimit,
+				MaxIdleConnsPerHost: concurrentLimit,
+			},
+			Timeout: DefaultTimeout,
+		},
 		depthLimit: depthLimit,
 		sema:       make(sema, concurrentLimit),
 		logging:    enableLogging,
@@ -236,17 +250,13 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
 	}
 
-	var client = &http.Client{
-		Timeout: time.Second * 5,
-	}
-
 	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
 			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
 		}
 
-		res, err := client.Get(url)
+		res, err := sc.client.Get(url)
 		var shouldTestSSL bool
 		var shouldErrorOut bool
 		if err != nil {
@@ -260,7 +270,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		if shouldTestSSL {
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", 1)
-				res2, err := client.Get(url)
+				res2, err := sc.client.Get(url)
 				if err != nil {
 					if sc.logging {
 						log.Error(logkey, "https failed", "error", err)
@@ -311,23 +321,19 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 		return err
 	}
 
-	var client = &http.Client{
-		Timeout: time.Second * 5,
-	}
-
 	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
 			log.Info(logkey, "Looking for the a email", "url", url)
 		}
-		res, err := client.Get(url)
+		res, err := sc.client.Get(url)
 		if err != nil {
 			if sc.logging {
 				log.Info(logkey, "Trying with https", "error", err)
 			}
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", -1)
-				res, err = client.Get(url)
+				res, err = sc.client.Get(url)
 				if err != nil {
 					if sc.logging {
 						log.Error(logkey, "https failed also", "error", err)
@@ -386,18 +392,14 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 		return err
 	}
 
-	var client = &http.Client{
-		Timeout: time.Second * 10,
-	}
-
-	res, err := client.Get(URL)
+	res, err := sc.client.Get(URL)
 	if err != nil {
 		if sc.logging {
 			log.Info(logkey, "Trying with https", "error", err)
 		}
 		if !strings.Contains(URL, "https:") {
 			URL = strings.Replace(URL, "http", "https", -1)
-			res, err = client.Get(URL)
+			res, err = sc.client.Get(URL)
 			if err != nil {
 				if sc.logging {
 					log.Error(logkey, "https failed also", "error", err)
