@@ -256,28 +256,27 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
 		}
 
-		res, err := sc.client.Get(url)
 		var shouldTestSSL bool
 		var shouldErrorOut bool
+
+		res, err := sc.client.Get(url)
 		if err != nil {
 			if sc.logging {
 				log.Error(logkey, "http failed", "error", err)
 			}
 			shouldTestSSL = true
 		}
-		defer res.Body.Close()
 
 		if shouldTestSSL {
 			if !strings.Contains(url, "https:") {
 				url = strings.Replace(url, "http", "https", 1)
-				res2, err := sc.client.Get(url)
+				res, err = sc.client.Get(url)
 				if err != nil {
 					if sc.logging {
 						log.Error(logkey, "https failed", "error", err)
 					}
 					shouldErrorOut = true
 				}
-				defer res2.Body.Close()
 			}
 		}
 
@@ -285,6 +284,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 			sc.saveResult(url, keyword, false, "")
 			return ErrUnresolvedOrTimedOut
 		}
+		defer res.Body.Close()
 
 		buf := sc.buffer.Get()
 		defer sc.buffer.Put(buf)
