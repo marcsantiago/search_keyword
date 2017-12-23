@@ -258,7 +258,6 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 
 		var shouldTestSSL bool
 		var shouldErrorOut bool
-
 		res, err := sc.client.Get(url)
 		if err != nil {
 			if sc.logging {
@@ -326,22 +325,33 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 		if sc.logging {
 			log.Info(logkey, "Looking for the a email", "url", url)
 		}
+
+		var shouldTestSSL bool
+		var shouldErrorOut bool
 		res, err := sc.client.Get(url)
 		if err != nil {
 			if sc.logging {
-				log.Info(logkey, "Trying with https", "error", err)
+				log.Error(logkey, "http failed", "error", err)
 			}
+			shouldTestSSL = true
+		}
+
+		if shouldTestSSL {
 			if !strings.Contains(url, "https:") {
-				url = strings.Replace(url, "http", "https", -1)
+				url = strings.Replace(url, "http", "https", 1)
 				res, err = sc.client.Get(url)
 				if err != nil {
 					if sc.logging {
-						log.Error(logkey, "https failed also", "error", err)
+						log.Error(logkey, "https failed", "error", err)
 					}
-					sc.saveResult(url, "", false, "")
+					shouldErrorOut = true
 				}
-				return ErrUnresolvedOrTimedOut
 			}
+		}
+
+		if shouldErrorOut {
+			sc.saveResult(url, "", false, "")
+			return ErrUnresolvedOrTimedOut
 		}
 		defer res.Body.Close()
 
@@ -392,22 +402,32 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 		return err
 	}
 
+	var shouldTestSSL bool
+	var shouldErrorOut bool
 	res, err := sc.client.Get(URL)
 	if err != nil {
 		if sc.logging {
-			log.Info(logkey, "Trying with https", "error", err)
+			log.Error(logkey, "http failed", "error", err)
 		}
+		shouldTestSSL = true
+	}
+
+	if shouldTestSSL {
 		if !strings.Contains(URL, "https:") {
-			URL = strings.Replace(URL, "http", "https", -1)
+			URL = strings.Replace(URL, "http", "https", 1)
 			res, err = sc.client.Get(URL)
 			if err != nil {
 				if sc.logging {
-					log.Error(logkey, "https failed also", "error", err)
+					log.Error(logkey, "https failed", "error", err)
 				}
-				sc.saveResult(URL, keyword, false, "")
+				shouldErrorOut = true
 			}
-			return err
 		}
+	}
+
+	if shouldErrorOut {
+		sc.saveResult(URL, keyword, false, "")
+		return ErrUnresolvedOrTimedOut
 	}
 	defer res.Body.Close()
 
