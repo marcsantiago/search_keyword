@@ -202,9 +202,9 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 	sc.mxt.Lock()
 	if sc.testing {
 		if found {
-			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", foundColor("yes"), "url", URL)
+			log.Info(logkey, "Result", "Search term", searchTermColor(keyword), "found", foundColor("yes"), "url", URL)
 		} else {
-			log.Info(logkey, "The search term %s was %s in the url %s ", searchTermColor(keyword), "found", notFoundColor("no"), "url", URL)
+			log.Info(logkey, "Result", "Search term", searchTermColor(keyword), "found", notFoundColor("no"), "url", URL)
 		}
 	}
 
@@ -245,25 +245,36 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		if sc.logging {
 			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
 		}
+
 		res, err := client.Get(url)
+		var shouldTestSSL bool
+		var shouldErrorOut bool
 		if err != nil {
 			if sc.logging {
 				log.Error(logkey, "http failed", "error", err)
 			}
+			shouldTestSSL = true
+		}
+		defer res.Body.Close()
 
+		if shouldTestSSL {
 			if !strings.Contains(url, "https:") {
-				url = strings.Replace(url, "http", "https", -1)
-				res, err = client.Get(url)
+				url = strings.Replace(url, "http", "https", 1)
+				res2, err := client.Get(url)
 				if err != nil {
 					if sc.logging {
 						log.Error(logkey, "https failed", "error", err)
 					}
-					sc.saveResult(url, keyword, false, "")
+					shouldErrorOut = true
 				}
-				return ErrUnresolvedOrTimedOut
+				defer res2.Body.Close()
 			}
 		}
-		defer res.Body.Close()
+
+		if shouldErrorOut {
+			sc.saveResult(url, keyword, false, "")
+			return ErrUnresolvedOrTimedOut
+		}
 
 		buf := sc.buffer.Get()
 		defer sc.buffer.Put(buf)

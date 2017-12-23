@@ -95,7 +95,7 @@ func TestNewBufferPool(t *testing.T) {
 }
 
 func TestScanner(t *testing.T) {
-	sc := NewScanner(1, true)
+	sc := NewScanner(1, 0, true)
 	sc.testing = true
 	err := sc.Search("facebook.com/", "Connect with friends")
 	if err != nil {
@@ -110,21 +110,11 @@ func TestScanner(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	err = sc.Search("thissiteshouldnotexist.com/", "(?i)Connect with friends")
-	if err == nil {
-		t.Error(err)
-	}
-
-	err = sc.SearchWithRegx("thissiteshouldnotexist.com/", regexp.MustCompile("(?i)Connect with friends"))
-	if err == nil {
-		t.Error(err)
-	}
 }
 
 func TestScannerRegx(t *testing.T) {
 	reg := regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
-	sc := NewScanner(1, false)
+	sc := NewScanner(1, 0, false)
 	sc.testing = true
 	err := sc.SearchWithRegx("https://en.wikipedia.org/wiki/Email_address", reg)
 	if err != nil {
@@ -133,7 +123,7 @@ func TestScannerRegx(t *testing.T) {
 }
 
 func TestSearchForEmailx(t *testing.T) {
-	sc := NewScanner(1, false)
+	sc := NewScanner(1, 0, false)
 	sc.testing = true
 	err := sc.SearchForEmail("https://en.wikipedia.org/wiki/Email_address", nil, nil)
 	if err != nil {
@@ -143,7 +133,7 @@ func TestSearchForEmailx(t *testing.T) {
 }
 
 func TestResultsToReader(t *testing.T) {
-	sc := NewScanner(1, false)
+	sc := NewScanner(1, 0, false)
 	sc.testing = true
 	err := sc.Search("facebook.com/", "Connect with friends")
 	if err != nil {
@@ -167,7 +157,7 @@ func TestResultsToReader(t *testing.T) {
 
 func TestGetResults(t *testing.T) {
 	var results Results
-	sc := NewScanner(1, false)
+	sc := NewScanner(1, 0, false)
 	sc.testing = true
 	if len(results) != len(sc.GetResults()) {
 		t.Errorf("length of results should be equal to length sc.GetResults()")
@@ -175,7 +165,7 @@ func TestGetResults(t *testing.T) {
 }
 
 func TestLogging(t *testing.T) {
-	sc := NewScanner(1, true)
+	sc := NewScanner(1, 0, true)
 	sc.testing = true
 	sc.Search("facebook.com", "sign up")
 	sc.SearchWithRegx("facebook.com", regexp.MustCompile("(?i)sign up"))
