@@ -36,8 +36,6 @@ var (
 	logkey          = "Scanner"
 )
 
-const depthLimit = 5
-
 // bufferPool maintains byte buffers used to read html content
 type bufferPool struct {
 	pool sync.Pool
@@ -93,7 +91,7 @@ func (slice Results) Swap(i, j int) {
 // Scanner is the basic structure used to interact with the html content of the page
 type Scanner struct {
 	// sema is used to limit the number of goroutines spinning up
-	sema chan struct{}
+	sema sema
 	// results is a slice of result
 	results Results
 	// buffer used to read html content
@@ -102,9 +100,20 @@ type Scanner struct {
 	logging bool
 	// used internally to lock writing to the map
 	mxt sync.Mutex
-
+	// used to define depth of search
+	depthLimit int
 	// used to turn off logging in testing
 	testing bool
+}
+
+type sema chan struct{}
+
+func (s sema) release() {
+	<-s
+}
+
+func (s sema) load() {
+	s <- struct{}{}
 }
 
 func inSlice(tar string, s []string) bool {
@@ -118,9 +127,13 @@ func inSlice(tar string, s []string) bool {
 
 func linksToCheck(baseURL string, limit int) (moreURLS []string) {
 	moreURLS = []string{baseURL}
+	if limit == 0 {
+		return
+	}
+
 	doc, err := goquery.NewDocument(baseURL)
 	if err != nil {
-		log.Error(logkey, "could not create doc", "error", err)
+		log.Error(logkey, "Could not create doc", "error", err)
 		return
 	}
 	doc.Find("body a").Each(func(index int, item *goquery.Selection) {
@@ -176,11 +189,12 @@ func normalizeURL(URL string) (s string, err error) {
 }
 
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
-func NewScanner(limit int, enableLogging bool) *Scanner {
+func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 	return &Scanner{
-		sema:    make(chan struct{}, limit),
-		logging: enableLogging,
-		buffer:  newbufferPool(limit / 2),
+		depthLimit: depthLimit,
+		sema:       make(sema, concurrentLimit),
+		logging:    enableLogging,
+		buffer:     newbufferPool(concurrentLimit / 2),
 	}
 }
 
@@ -201,9 +215,8 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 
 // Search looks for the passed keyword in the html respose
 func (sc *Scanner) Search(URL, keyword string) (err error) {
-	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
@@ -227,7 +240,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		Timeout: time.Second * 5,
 	}
 
-	urls := linksToCheck(URL, depthLimit)
+	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
 			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
@@ -276,8 +289,8 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	}
 
 	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
@@ -291,7 +304,7 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 		Timeout: time.Second * 5,
 	}
 
-	urls := linksToCheck(URL, depthLimit)
+	urls := linksToCheck(URL, sc.depthLimit)
 	for _, url := range urls {
 		if sc.logging {
 			log.Info(logkey, "Looking for the a email", "url", url)
@@ -347,9 +360,8 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 
 // SearchWithRegx allows you to pass a regular expression i as a search paramter
 func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
-	// make sure to use the semaphore we've defined
-	sc.sema <- struct{}{}
-	defer func() { <-sc.sema }()
+	sc.sema.load()
+	defer sc.sema.release()
 
 	if sc.logging {
 		log.Info(logkey, "Looking for the keyword", "keyword", keyword, "url", URL)

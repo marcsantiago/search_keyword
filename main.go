@@ -97,7 +97,8 @@ func main() {
 	inputFile := flag.String("in", "", "the input file path containing the list of urls or folder path containing files pointing to urls")
 	outFile := flag.String("out", "", "output file path")
 	keyword := flag.String("keyword", "", "keyword to search for")
-	limit := flag.Int("limit", 20, "set the limit of goroutines to spin up")
+	limit := flag.Int("concurrency", 20, "set the limit of goroutines to spin up")
+	depth := flag.Int("depth", 0, "set how depth of the search")
 	flag.Parse()
 
 	if *inputFile == "" {
@@ -120,7 +121,7 @@ func main() {
 		log.Fatal(logKey, "Os.Stat", "error", err)
 	}
 
-	sc := search.NewScanner(*limit, true)
+	sc := search.NewScanner(*limit, *depth, true)
 
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
