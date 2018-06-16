@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -25,11 +26,11 @@ var (
 	DefaultTimeout = 10 * time.Second
 
 	// ErrURLEmpty to warn users that they passed an empty string in
-	ErrURLEmpty = fmt.Errorf("the url string is empty")
+	ErrURLEmpty = fmt.Errorf("url string is empty")
 	// ErrDomainMissing domain was missing from the url
 	ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
 	// ErrUnresolvedOrTimedOut ...
-	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timeout")
+	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timed out")
 
 	// EmailRegex provides a base email regex for scraping emails
 	EmailRegex = regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
@@ -38,34 +39,9 @@ var (
 	foundColor      = color.New(color.FgGreen).SprintFunc()
 	notFoundColor   = color.New(color.FgRed).SprintFunc()
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
-	logkey          = "Scanner"
+
+	logkey = "Scanner"
 )
-
-// bufferPool maintains byte buffers used to read html content
-type bufferPool struct {
-	pool sync.Pool
-}
-
-// newbufferPool creates a new bufferPool bounded to the given size.
-func newbufferPool(size int) *bufferPool {
-	var bp bufferPool
-	bp.pool.New = func() interface{} {
-		return new(bytes.Buffer)
-	}
-	return &bp
-}
-
-// Get gets a Buffer from the bufferPool, or creates a new one if none are
-// available in the pool.
-func (bp *bufferPool) Get() *bytes.Buffer {
-	return bp.pool.Get().(*bytes.Buffer)
-}
-
-// Put returns the given Buffer to the bufferPool.
-func (bp *bufferPool) Put(b *bytes.Buffer) {
-	b.Reset()
-	bp.pool.Put(b)
-}
 
 // Result is the basic return type for Search and SearchWithRegx
 type Result struct {
@@ -101,8 +77,6 @@ type Scanner struct {
 	sema sema
 	// results is a slice of result
 	results Results
-	// buffer used to read html content
-	buffer *bufferPool
 	// turn on and off logging
 	logging bool
 	// used internally to lock writing to the map
@@ -135,9 +109,10 @@ func linksToCheck(baseURL string, limit int) (moreURLS []string) {
 
 	doc, err := goquery.NewDocument(baseURL)
 	if err != nil {
-		log.Error(logkey, "Could not create doc", "error", err)
+		log.Error(logkey, "could not create doc", "error", err)
 		return
 	}
+
 	doc.Find("body a").Each(func(index int, item *goquery.Selection) {
 		link, _ := item.Attr("href")
 		if strings.Contains(link, baseURL) {
@@ -178,8 +153,8 @@ func normalizeURL(URL string) (s string, err error) {
 	if scheme == "" {
 		scheme = "http"
 	}
-	s = fmt.Sprintf("%s:%s", scheme, path)
 
+	s = fmt.Sprintf("%s:%s", scheme, path)
 	if !strings.Contains(path, "://") {
 		s = fmt.Sprintf("%s://%s", scheme, path)
 	}
@@ -208,20 +183,19 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 		depthLimit: depthLimit,
 		sema:       make(sema, concurrentLimit),
 		logging:    enableLogging,
-		buffer:     newbufferPool(concurrentLimit / 2),
 	}
 }
 
 func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
-	sc.mxt.Lock()
 	if sc.testing {
+		foundS := notFoundColor("no")
 		if found {
-			log.Info(logkey, "Result", "Search term", searchTermColor(keyword), "found", foundColor("yes"), "url", URL)
-		} else {
-			log.Info(logkey, "Result", "Search term", searchTermColor(keyword), "found", notFoundColor("no"), "url", URL)
+			foundS = foundColor("yes")
 		}
+		log.Info(logkey, "result", "search term", searchTermColor(keyword), "found", foundS, "url", URL)
 	}
 
+	sc.mxt.Lock()
 	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
 	sc.mxt.Unlock()
 	return
@@ -235,7 +209,7 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(logkey, "Could not normalize url", "error", err)
+			log.Error(logkey, "could not normalize url", "error", err)
 		}
 		return err
 	}
@@ -251,51 +225,29 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 	}
 
 	urls := linksToCheck(URL, sc.depthLimit)
-	for _, url := range urls {
+	for _, URL := range urls {
 		if sc.logging {
-			log.Info(logkey, "Looking for keyword", "keyword", keyword, "url", url)
+			log.Info(logkey, "looking for keyword", "keyword", keyword, "url", URL)
 		}
 
-		var shouldTestSSL bool
-		var shouldErrorOut bool
-		res, err := sc.client.Get(url)
+		body, err := sc.makeRequest(URL)
 		if err != nil {
-			if sc.logging {
-				log.Error(logkey, "http failed", "error", err)
+			if strings.Contains(URL, "https:") {
+				return err
 			}
-			shouldTestSSL = true
-		}
-
-		if shouldTestSSL {
-			if !strings.Contains(url, "https:") {
-				url = strings.Replace(url, "http", "https", 1)
-				res, err = sc.client.Get(url)
-				if err != nil {
-					if sc.logging {
-						log.Error(logkey, "https failed", "error", err)
-					}
-					shouldErrorOut = true
-				}
+			URL = strings.Replace(URL, "http", "https", 1)
+			body, err = sc.makeRequest(URL)
+			if err != nil {
+				return err
 			}
 		}
 
-		if shouldErrorOut {
-			sc.saveResult(url, keyword, false, "")
-			return ErrUnresolvedOrTimedOut
-		}
-		defer res.Body.Close()
-
-		buf := sc.buffer.Get()
-		defer sc.buffer.Put(buf)
-		io.Copy(buf, res.Body)
-
-		b := buf.Bytes()
-		found := searchRegex.Match(b)
+		found := searchRegex.Match(body)
 		var context string
 		if found {
-			context = newLineReplacer.Replace(string(contextRegex.Find(b)))
+			context = newLineReplacer.Replace(string(contextRegex.Find(body)))
 		}
-		sc.saveResult(url, keyword, found, context)
+		sc.saveResult(URL, keyword, found, context)
 	}
 
 	return nil
@@ -315,51 +267,30 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(logkey, "Could not normalize URL", "error", err)
+			log.Error(logkey, "could not normalize URL", "error", err)
 		}
 		return err
 	}
 
 	urls := linksToCheck(URL, sc.depthLimit)
-	for _, url := range urls {
+	for _, URL := range urls {
 		if sc.logging {
-			log.Info(logkey, "Looking for the a email", "url", url)
+			log.Info(logkey, "looking for the a email", "url", URL)
 		}
 
-		var shouldTestSSL bool
-		var shouldErrorOut bool
-		res, err := sc.client.Get(url)
+		body, err := sc.makeRequest(URL)
 		if err != nil {
-			if sc.logging {
-				log.Error(logkey, "http failed", "error", err)
+			if strings.Contains(URL, "https:") {
+				return err
 			}
-			shouldTestSSL = true
-		}
-
-		if shouldTestSSL {
-			if !strings.Contains(url, "https:") {
-				url = strings.Replace(url, "http", "https", 1)
-				res, err = sc.client.Get(url)
-				if err != nil {
-					if sc.logging {
-						log.Error(logkey, "https failed", "error", err)
-					}
-					shouldErrorOut = true
-				}
+			URL = strings.Replace(URL, "http", "https", 1)
+			body, err = sc.makeRequest(URL)
+			if err != nil {
+				return err
 			}
 		}
 
-		if shouldErrorOut {
-			sc.saveResult(url, "", false, "")
-			return ErrUnresolvedOrTimedOut
-		}
-		defer res.Body.Close()
-
-		buf := sc.buffer.Get()
-		defer sc.buffer.Put(buf)
-		io.Copy(buf, res.Body)
-
-		emails := emailRegex.FindStringSubmatch(buf.String())
+		emails := emailRegex.FindStringSubmatch(string(body))
 		var clean []string
 		found := false
 		if len(emails) > 0 {
@@ -380,7 +311,7 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 
 			}
 		}
-		sc.saveResult(url, "", found, clean)
+		sc.saveResult(URL, "", found, clean)
 	}
 	return
 }
@@ -391,56 +322,34 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 	defer sc.sema.release()
 
 	if sc.logging {
-		log.Info(logkey, "Looking for the keyword", "keyword", keyword, "url", URL)
+		log.Info(logkey, "looking for the keyword", "keyword", keyword, "url", URL)
 	}
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
 		if sc.logging {
-			log.Error(logkey, "Could not normalize urk", "error", err)
+			log.Error(logkey, "could not normalize urk", "error", err)
 		}
 		return err
 	}
 
-	var shouldTestSSL bool
-	var shouldErrorOut bool
-	res, err := sc.client.Get(URL)
+	body, err := sc.makeRequest(URL)
 	if err != nil {
-		if sc.logging {
-			log.Error(logkey, "http failed", "error", err)
+		if strings.Contains(URL, "https:") {
+			return err
 		}
-		shouldTestSSL = true
-	}
-
-	if shouldTestSSL {
-		if !strings.Contains(URL, "https:") {
-			URL = strings.Replace(URL, "http", "https", 1)
-			res, err = sc.client.Get(URL)
-			if err != nil {
-				if sc.logging {
-					log.Error(logkey, "https failed", "error", err)
-				}
-				shouldErrorOut = true
-			}
+		URL = strings.Replace(URL, "http", "https", 1)
+		body, err = sc.makeRequest(URL)
+		if err != nil {
+			return err
 		}
 	}
 
-	if shouldErrorOut {
-		sc.saveResult(URL, keyword, false, "")
-		return ErrUnresolvedOrTimedOut
-	}
-	defer res.Body.Close()
-
-	buf := sc.buffer.Get()
-	defer sc.buffer.Put(buf)
-	io.Copy(buf, res.Body)
-
-	b := buf.Bytes()
-	found := keyword.Match(b)
+	found := keyword.Match(body)
 	var context string
 	if found {
 		contextRegex := regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
-		context = newLineReplacer.Replace(string(contextRegex.Find(b)))
+		context = newLineReplacer.Replace(string(contextRegex.Find(body)))
 	}
 	sc.saveResult(URL, keyword, found, context)
 	return
@@ -452,7 +361,7 @@ func (sc *Scanner) ResultsToReader() (io.Reader, error) {
 	b, err := json.Marshal(sc.results)
 	if err != nil {
 		if sc.logging {
-			log.Error(logkey, "Could not marshal data", "error", err)
+			log.Error(logkey, "could not marshal data", "error", err)
 		}
 		return nil, err
 	}
@@ -462,4 +371,13 @@ func (sc *Scanner) ResultsToReader() (io.Reader, error) {
 // GetResults returns raw results not converted to a io.Reader
 func (sc *Scanner) GetResults() Results {
 	return sc.results
+}
+
+func (sc *Scanner) makeRequest(URL string) ([]byte, error) {
+	res, err := sc.client.Get(URL)
+	if err != nil {
+		return []byte(""), err
+	}
+	defer res.Body.Close()
+	return ioutil.ReadAll(res.Body)
 }

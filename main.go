@@ -13,13 +13,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/marcsantiago/search_keyword/search"
-
 	"github.com/fatih/color"
 	log "github.com/marcsantiago/logger"
+	"github.com/marcsantiago/search_keyword/search"
 )
 
-const logKey = "Main Search"
+const logKey = "Main"
 
 var errColor = color.New(color.FgRed).SprintFunc()
 
@@ -41,7 +40,7 @@ func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 
 		file, err := os.Open(p)
 		if err != nil {
-			log.Fatal(logKey, "Couldn't open file", "error", err)
+			log.Fatal(logKey, "couldn't open file", "error", err)
 		}
 		defer file.Close()
 
@@ -80,13 +79,16 @@ func readFromFile(path, keyword string, sc *search.Scanner) (err error) {
 
 func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
 	defer wg.Done()
+
 	parts := strings.Split(line, ",")
-	if len(parts) > 0 {
-		URL := strings.Replace(parts[1], "\"", "", -1)
-		err := sc.Search(URL, keyword)
-		if err != nil {
-			log.Error(logKey, "Search error", "error", errColor(err))
-		}
+	if len(parts) <= 0 {
+		return
+	}
+
+	URL := strings.Replace(parts[1], "\"", "", -1)
+	err := sc.Search(URL, keyword)
+	if err != nil {
+		log.Error(logKey, "search error", "error", errColor(err))
 	}
 }
 
@@ -97,42 +99,42 @@ func main() {
 	inputFile := flag.String("in", "", "the input file path containing the list of urls or folder path containing files pointing to urls")
 	outFile := flag.String("out", "", "output file path")
 	keyword := flag.String("keyword", "", "keyword to search for")
+	enableLogging := flag.Bool("logging", false, "enables logging")
 	limit := flag.Int("concurrency", 20, "set the limit of goroutines to spin up")
 	depth := flag.Int("depth", 0, "set how depth of the search")
 	flag.Parse()
 
 	if *inputFile == "" {
 		flag.PrintDefaults()
-		log.Fatal(logKey, "Input file path cannot be empty")
+		log.Fatal(logKey, "input file path cannot be empty")
 	}
 
 	if *outFile == "" {
 		flag.PrintDefaults()
-		log.Fatal(logKey, "Out file path cannot be empty")
+		log.Fatal(logKey, "out file path cannot be empty")
 	}
 
 	if *keyword == "" {
 		flag.PrintDefaults()
-		log.Fatal(logKey, "Keyword cannot be empty")
+		log.Fatal(logKey, "keyword cannot be empty")
 	}
 
 	fi, err := os.Stat(*inputFile)
 	if err != nil {
-		log.Fatal(logKey, "Os.Stat", "error", err)
+		log.Fatal(logKey, "os.Stat", "error", err)
 	}
 
-	sc := search.NewScanner(*limit, *depth, true)
-
+	sc := search.NewScanner(*limit, *depth, *enableLogging)
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
 		err := readFromDirectory(*inputFile, *keyword, sc)
 		if err != nil {
-			log.Fatal(logKey, "Could not read from directory", "error", err)
+			log.Fatal(logKey, "could not read from directory", "error", err)
 		}
 	case mode.IsRegular():
 		err := readFromFile(*inputFile, *keyword, sc)
 		if err != nil {
-			log.Fatal(logKey, "Could not read from file", "error", err)
+			log.Fatal(logKey, "could not read from file", "error", err)
 		}
 	}
 
@@ -140,25 +142,21 @@ func main() {
 	header := fmt.Sprintf("search for keyword %s\nurl,found,context\n", *keyword)
 	_, err = buf.WriteString(header)
 	if err != nil {
-		log.Error(logKey, "Buffer could not write initial string")
+		log.Error(logKey, "buffer could not write initial string")
 	}
-	log.Info(logKey, "Sorting and writing results...")
 
-	// USING A CHANNEL INSTEAD, BELOW IS AN EXAMPLE OF HOW
-	// THE PROGRAM WOULD WORK IF nil WAS PASSED INSTEAD OF A CHANNEL
 	res := sc.GetResults()
-	// sorting the slice for easier viewing
 	sort.Sort(res)
 	for _, r := range res {
 		line := fmt.Sprintf("%s, %v, %v\n", r.URL, r.Found, r.Context)
 		_, err = buf.WriteString(line)
 		if err != nil {
-			log.Error(logKey, "Couldn't write string", "message", line)
+			log.Fatal(logKey, "couldn't write string", "message", line)
 		}
 	}
+
 	err = ioutil.WriteFile(*outFile, buf.Bytes(), 0644)
 	if err != nil {
-		log.Fatal(logKey, "Couldn't write file", "error", err)
+		log.Fatal(logKey, "couldn't write file", "error", err)
 	}
-
 }
