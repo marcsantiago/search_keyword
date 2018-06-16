@@ -22,7 +22,7 @@ import (
 
 var (
 	// DefaultTimeout is the duration used to determine get request timeout
-	// this is exported so that i can be changed
+	// this is exported so that I can be changed
 	DefaultTimeout = 10 * time.Second
 
 	// ErrURLEmpty to warn users that they passed an empty string in
@@ -175,8 +175,8 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 					Timeout: DefaultTimeout,
 				}).Dial,
 				TLSHandshakeTimeout: DefaultTimeout,
-				MaxIdleConns:        concurrentLimit,
-				MaxIdleConnsPerHost: concurrentLimit,
+				MaxIdleConns:        concurrentLimit * 2,
+				MaxIdleConnsPerHost: concurrentLimit * 2,
 			},
 			Timeout: DefaultTimeout,
 		},
