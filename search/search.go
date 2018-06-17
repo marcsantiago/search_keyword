@@ -180,11 +180,7 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 
 func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
 	if sc.Logging {
-		foundS := "no"
-		if found {
-			foundS = "yes"
-		}
-		log.Info(logkey, "result", "search term", keyword, "found", foundS, "url", URL)
+		log.Info(logkey, "result", "search term", keyword, "found", found, "url", URL)
 	}
 
 	sc.mxt.Lock()
