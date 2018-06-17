@@ -46,12 +46,12 @@ var (
 // Result is the basic return type for Search and SearchWithRegx
 type Result struct {
 	// Keyword is the passed keyword. It is an interface because it can be a string or regular expression
-	Keyword interface{}
+	Keyword interface{} `json:"keyword,omitempty"`
 	// URL is the url passed in
-	URL string
+	URL string `json:"url,omitempty"`
 	// Found determines whether or not the keyword was matched on the page
-	Found   bool
-	Context interface{}
+	Found   bool        `json:"found,omitempty"`
+	Context interface{} `json:"context,omitempty"`
 }
 
 // Results is the plural of results which implements the Sort interface. Sorting by URL.  If the slice needs to be sorted then the user can call sort.Sort
@@ -71,26 +71,25 @@ func (slice Results) Swap(i, j int) {
 
 // Scanner is the basic structure used to interact with the html content of the page
 type Scanner struct {
-	// client is used to make requests
-	client *http.Client
-	// sema is used to limit the number of goroutines spinning up
-	sema sema
-	// results is a slice of result
-	results Results
-	// turn on and off logging
-	logging bool
+	// Client is used to make requests
+	Client *http.Client
+	// Semaphore is used to limit the number of goroutines spinning up
+	Semaphore Semaphore
+	// Sema is a slice of result
+	Results Results
+	// Logging turn on or off
+	Logging bool
 	// used internally to lock writing to the map
 	mxt sync.Mutex
-	// used to define depth of search
-	depthLimit int
-	// used to turn off logging in testing
-	testing bool
+	// DepthLimit used to define depth of search
+	DepthLimit int
 }
 
-type sema chan struct{}
+// Semaphore ...
+type Semaphore chan struct{}
 
-func (s sema) release() { <-s }
-func (s sema) load()    { s <- struct{}{} }
+func (s Semaphore) release() { <-s }
+func (s Semaphore) load()    { s <- struct{}{} }
 
 func inSlice(tar string, s []string) bool {
 	for _, i := range s {
@@ -168,7 +167,7 @@ func normalizeURL(URL string) (s string, err error) {
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
 func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 	return &Scanner{
-		client: &http.Client{
+		Client: &http.Client{
 			Transport: &http.Transport{
 				Proxy: http.ProxyFromEnvironment,
 				Dial: (&net.Dialer{
@@ -180,14 +179,14 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 			},
 			Timeout: DefaultTimeout,
 		},
-		depthLimit: depthLimit,
-		sema:       make(sema, concurrentLimit),
-		logging:    enableLogging,
+		DepthLimit: depthLimit,
+		Semaphore:  make(Semaphore, concurrentLimit),
+		Logging:    enableLogging,
 	}
 }
 
 func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
-	if sc.testing {
+	if sc.Logging {
 		foundS := notFoundColor("no")
 		if found {
 			foundS = foundColor("yes")
@@ -196,19 +195,19 @@ func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk
 	}
 
 	sc.mxt.Lock()
-	sc.results = append(sc.results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
+	sc.Results = append(sc.Results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
 	sc.mxt.Unlock()
 	return
 }
 
 // Search looks for the passed keyword in the html respose
 func (sc *Scanner) Search(URL, keyword string) (err error) {
-	sc.sema.load()
-	defer sc.sema.release()
+	sc.Semaphore.load()
+	defer sc.Semaphore.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
-		if sc.logging {
+		if sc.Logging {
 			log.Error(logkey, "could not normalize url", "error", err)
 		}
 		return err
@@ -224,9 +223,9 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
 	}
 
-	urls := linksToCheck(URL, sc.depthLimit)
+	urls := linksToCheck(URL, sc.DepthLimit)
 	for _, URL := range urls {
-		if sc.logging {
+		if sc.Logging {
 			log.Info(logkey, "looking for keyword", "keyword", keyword, "url", URL)
 		}
 
@@ -261,20 +260,20 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	}
 
 	// make sure to use the semaphore we've defined
-	sc.sema.load()
-	defer sc.sema.release()
+	sc.Semaphore.load()
+	defer sc.Semaphore.release()
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
-		if sc.logging {
+		if sc.Logging {
 			log.Error(logkey, "could not normalize URL", "error", err)
 		}
 		return err
 	}
 
-	urls := linksToCheck(URL, sc.depthLimit)
+	urls := linksToCheck(URL, sc.DepthLimit)
 	for _, URL := range urls {
-		if sc.logging {
+		if sc.Logging {
 			log.Info(logkey, "looking for the a email", "url", URL)
 		}
 
@@ -318,16 +317,16 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 
 // SearchWithRegx allows you to pass a regular expression i as a search paramter
 func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
-	sc.sema.load()
-	defer sc.sema.release()
+	sc.Semaphore.load()
+	defer sc.Semaphore.release()
 
-	if sc.logging {
+	if sc.Logging {
 		log.Info(logkey, "looking for the keyword", "keyword", keyword, "url", URL)
 	}
 
 	URL, err = normalizeURL(URL)
 	if err != nil {
-		if sc.logging {
+		if sc.Logging {
 			log.Error(logkey, "could not normalize urk", "error", err)
 		}
 		return err
@@ -358,9 +357,9 @@ func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error
 // ResultsToReader sorts a slice of Result to an io.Reader so that the end user can decide how they want that data
 // csv, text, etc
 func (sc *Scanner) ResultsToReader() (io.Reader, error) {
-	b, err := json.Marshal(sc.results)
+	b, err := json.Marshal(sc.Results)
 	if err != nil {
-		if sc.logging {
+		if sc.Logging {
 			log.Error(logkey, "could not marshal data", "error", err)
 		}
 		return nil, err
@@ -368,13 +367,8 @@ func (sc *Scanner) ResultsToReader() (io.Reader, error) {
 	return bytes.NewReader(b), nil
 }
 
-// GetResults returns raw results not converted to a io.Reader
-func (sc *Scanner) GetResults() Results {
-	return sc.results
-}
-
 func (sc *Scanner) makeRequest(URL string) ([]byte, error) {
-	res, err := sc.client.Get(URL)
+	res, err := sc.Client.Get(URL)
 	if err != nil {
 		return []byte(""), err
 	}

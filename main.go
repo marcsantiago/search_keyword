@@ -145,9 +145,8 @@ func main() {
 		log.Error(logKey, "buffer could not write initial string")
 	}
 
-	res := sc.GetResults()
-	sort.Sort(res)
-	for _, r := range res {
+	sort.Sort(sc.Results)
+	for _, r := range sc.Results {
 		line := fmt.Sprintf("%s, %v, %v\n", r.URL, r.Found, r.Context)
 		_, err = buf.WriteString(line)
 		if err != nil {
