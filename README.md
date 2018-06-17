@@ -26,7 +26,6 @@ Package search searches for a keyword within the html of pages (safe for concurr
   * [func NewScanner(limit int, enableLogging bool) *Scanner](#NewScanner)
   * [func (sc *Scanner) ResultsToReader() (io.Reader, error)](#Scanner.ResultsToReader)
   * [func (sc *Scanner) Search(URL, keyword string) (err error)](#Scanner.Search)
-  * [func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error)](#Scanner.SearchWithRegex)
 
 
 #### <a name="pkg-files">Package files</a>
@@ -142,21 +141,6 @@ csv, text, etc
 func (sc *Scanner) Search(URL, keyword string) (err error)
 ```
 Search looks for the passed keyword in the html respose
-
-
-
-
-### <a name="Scanner.SearchWithRegex">func</a> (\*Scanner) [SearchWithRegex](/src/target/search.go?s=4733:4814#L194)
-``` go
-func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error)
-```
-SearchWithRegex allows you to pass a regular expression i as a search paramter
-
-
-
-
-
-
 
 
 - - -

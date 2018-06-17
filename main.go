@@ -19,7 +19,7 @@ import (
 
 const logKey = "Main"
 
-func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
+func readFromDirectory(dir string, sc *search.Scanner) (err error) {
 	var wg sync.WaitGroup
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -44,7 +44,7 @@ func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			wg.Add(1)
-			go scan(scanner.Text(), keyword, &wg, sc)
+			go scan(scanner.Text(), &wg, sc)
 		}
 
 		if err := scanner.Err(); err != nil {
@@ -55,7 +55,7 @@ func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 	return
 }
 
-func readFromFile(path, keyword string, sc *search.Scanner) (err error) {
+func readFromFile(path string, sc *search.Scanner) (err error) {
 	var wg sync.WaitGroup
 	file, err := os.Open(path)
 	if err != nil {
@@ -65,16 +65,17 @@ func readFromFile(path, keyword string, sc *search.Scanner) (err error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		wg.Add(1)
-		go scan(scanner.Text(), keyword, &wg, sc)
+		go scan(scanner.Text(), &wg, sc)
 	}
+	wg.Wait()
+
 	if err = scanner.Err(); err != nil {
 		return
 	}
-	wg.Wait()
 	return
 }
 
-func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
+func scan(line string, wg *sync.WaitGroup, sc *search.Scanner) {
 	defer wg.Done()
 
 	parts := strings.Split(line, ",")
@@ -83,7 +84,7 @@ func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
 	}
 
 	URL := strings.Replace(parts[1], "\"", "", -1)
-	err := sc.Search(URL, keyword)
+	err := sc.Search(URL)
 	if err != nil {
 		log.Error(logKey, "search error", "error", err)
 	}
@@ -121,15 +122,15 @@ func main() {
 		log.Fatal(logKey, "os.Stat", "error", err)
 	}
 
-	sc := search.NewScanner(*limit, *depth, *enableLogging)
+	sc := search.NewScanner(*limit, *depth, *enableLogging, *keyword)
 	switch mode := fi.Mode(); {
 	case mode.IsDir():
-		err := readFromDirectory(*inputFile, *keyword, sc)
+		err := readFromDirectory(*inputFile, sc)
 		if err != nil {
 			log.Fatal(logKey, "could not read from directory", "error", err)
 		}
 	case mode.IsRegular():
-		err := readFromFile(*inputFile, *keyword, sc)
+		err := readFromFile(*inputFile, sc)
 		if err != nil {
 			log.Fatal(logKey, "could not read from file", "error", err)
 		}

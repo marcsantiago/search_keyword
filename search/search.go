@@ -35,7 +35,7 @@ var (
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
 )
 
-// Result is the basic return type for Search and SearchWithRegex
+// Result is the basic return type for Search
 type Result struct {
 	// Keyword is the passed keyword. It is an interface because it can be a string or regular expression
 	Keyword interface{} `json:"keyword,omitempty"`
@@ -71,10 +71,16 @@ type Scanner struct {
 	Results Results
 	// Logging turn on or off
 	Logging bool
-	// used internally to lock writing to the map
-	mxt sync.Mutex
 	// DepthLimit used to define depth of search
 	DepthLimit int
+	// Keyword is the keyword being searched for
+	Keyword string
+	// used internally to lock writing to the map
+	mxt sync.Mutex
+
+	// used to avoid having to compile more than once
+	searchRegex  *regexp.Regexp
+	contextRegex *regexp.Regexp
 }
 
 // Semaphore ...
@@ -157,7 +163,16 @@ func normalizeURL(URL string) (s string, err error) {
 }
 
 // NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
-func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
+func NewScanner(concurrentLimit, depthLimit int, enableLogging bool, keyword string) *Scanner {
+	var searchRegex, contextRegex *regexp.Regexp
+	if strings.Contains(keyword, "(?i)") {
+		searchRegex = regexp.MustCompile(keyword)
+		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", strings.Replace(keyword, "(?i)", "", 1)))
+	} else {
+		searchRegex = regexp.MustCompile("(?i)" + keyword)
+		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
+	}
+
 	return &Scanner{
 		Client: &http.Client{
 			Transport: &http.Transport{
@@ -171,25 +186,28 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 			},
 			Timeout: DefaultTimeout,
 		},
-		DepthLimit: depthLimit,
-		Semaphore:  make(Semaphore, concurrentLimit),
-		Logging:    enableLogging,
+		Keyword:      keyword,
+		DepthLimit:   depthLimit,
+		Semaphore:    make(Semaphore, concurrentLimit),
+		Logging:      enableLogging,
+		contextRegex: contextRegex,
+		searchRegex:  searchRegex,
 	}
 }
 
-func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
+func (sc *Scanner) saveResult(URL string, found bool, chunk interface{}) {
 	if sc.Logging {
-		log.Info(logkey, "result", "search term", keyword, "found", found, "url", URL)
+		log.Info(logkey, "result", "search term", sc.Keyword, "found", found, "url", URL)
 	}
 
 	sc.mxt.Lock()
-	sc.Results = append(sc.Results, Result{URL: URL, Found: found, Keyword: keyword, Context: chunk})
+	sc.Results = append(sc.Results, Result{URL: URL, Found: found, Keyword: sc.Keyword, Context: chunk})
 	sc.mxt.Unlock()
 	return
 }
 
 // Search looks for the passed keyword in the html respose
-func (sc *Scanner) Search(URL, keyword string) (err error) {
+func (sc *Scanner) Search(URL string) (err error) {
 	sc.Semaphore.load()
 	defer sc.Semaphore.release()
 
@@ -201,20 +219,10 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 		return err
 	}
 
-	// not assuming a regex pattern will be passed
-	var searchRegex, contextRegex *regexp.Regexp
-	if strings.Contains(keyword, "(?i)") {
-		searchRegex = regexp.MustCompile(keyword)
-		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", strings.Replace(keyword, "(?i)", "", 1)))
-	} else {
-		searchRegex = regexp.MustCompile("(?i)" + keyword)
-		contextRegex = regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
-	}
-
 	urls := linksToCheck(URL, sc.DepthLimit)
 	for _, URL := range urls {
 		if sc.Logging {
-			log.Info(logkey, "looking for keyword", "keyword", keyword, "url", URL)
+			log.Info(logkey, "looking for keyword", "keyword", sc.Keyword, "url", URL)
 		}
 
 		body, err := sc.makeRequest(URL)
@@ -229,12 +237,12 @@ func (sc *Scanner) Search(URL, keyword string) (err error) {
 			}
 		}
 
-		found := searchRegex.Match(body)
+		found := sc.searchRegex.Match(body)
 		var context string
 		if found {
-			context = newLineReplacer.Replace(string(contextRegex.Find(body)))
+			context = newLineReplacer.Replace(string(sc.contextRegex.Find(body)))
 		}
-		sc.saveResult(URL, keyword, found, context)
+		sc.saveResult(URL, found, context)
 	}
 
 	return nil
@@ -298,47 +306,8 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 
 			}
 		}
-		sc.saveResult(URL, "", found, clean)
+		sc.saveResult(URL, found, clean)
 	}
-	return
-}
-
-// SearchWithRegex allows you to pass a regular expression i as a search paramter
-func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error) {
-	sc.Semaphore.load()
-	defer sc.Semaphore.release()
-
-	if sc.Logging {
-		log.Info(logkey, "looking for the keyword", "keyword", keyword, "url", URL)
-	}
-
-	URL, err = normalizeURL(URL)
-	if err != nil {
-		if sc.Logging {
-			log.Error(logkey, "could not normalize urk", "error", err)
-		}
-		return err
-	}
-
-	body, err := sc.makeRequest(URL)
-	if err != nil {
-		if strings.Contains(URL, "https:") {
-			return err
-		}
-		URL = strings.Replace(URL, "http", "https", 1)
-		body, err = sc.makeRequest(URL)
-		if err != nil {
-			return err
-		}
-	}
-
-	found := keyword.Match(body)
-	var context string
-	if found {
-		contextRegex := regexp.MustCompile(fmt.Sprintf("(?i)(<[^<]+)(%s)([^>]+>)", keyword))
-		context = newLineReplacer.Replace(string(contextRegex.Find(body)))
-	}
-	sc.saveResult(URL, keyword, found, context)
 	return
 }
 

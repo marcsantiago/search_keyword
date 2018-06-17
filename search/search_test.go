@@ -2,7 +2,6 @@ package search
 
 import (
 	"io/ioutil"
-	"regexp"
 	"testing"
 )
 
@@ -65,8 +64,8 @@ func TestNormalizeURL(t *testing.T) {
 }
 
 func TestScanner(t *testing.T) {
-	sc := NewScanner(1, 0, false)
-	err := sc.Search("facebook.com/", "Connect with friends")
+	sc := NewScanner(1, 0, false, "Connect with friends")
+	err := sc.Search("facebook.com/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -74,24 +73,10 @@ func TestScanner(t *testing.T) {
 	if len(sc.Results) != 1 {
 		t.Errorf("the map should only have one value in it, found %d", len(sc.Results))
 	}
-
-	err = sc.Search("facebook.com/", "(?i)Connect with friends")
-	if err != nil {
-		t.Error(err)
-	}
-}
-
-func TestScannerRegx(t *testing.T) {
-	reg := regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
-	sc := NewScanner(1, 0, false)
-	err := sc.SearchWithRegex("https://en.wikipedia.org/wiki/Email_address", reg)
-	if err != nil {
-		t.Error(err)
-	}
 }
 
 func TestSearchForEmailx(t *testing.T) {
-	sc := NewScanner(1, 0, false)
+	sc := NewScanner(1, 0, false, "")
 	err := sc.SearchForEmail("https://en.wikipedia.org/wiki/Email_address", nil, nil)
 	if err != nil {
 		t.Error(err)
@@ -99,8 +84,8 @@ func TestSearchForEmailx(t *testing.T) {
 }
 
 func TestResultsToReader(t *testing.T) {
-	sc := NewScanner(1, 0, false)
-	err := sc.Search("facebook.com/", "Connect with friends")
+	sc := NewScanner(1, 0, false, "Connect with friends")
+	err := sc.Search("facebook.com/")
 	if err != nil {
 		t.Error(err)
 	}
@@ -122,7 +107,7 @@ func TestResultsToReader(t *testing.T) {
 
 func TestGetResults(t *testing.T) {
 	var results Results
-	sc := NewScanner(1, 0, false)
+	sc := NewScanner(1, 0, false, "")
 	if len(results) != len(sc.Results) {
 		t.Errorf("length of results should be equal to length sc.GetResults()")
 	}
