@@ -84,7 +84,7 @@ func TestScanner(t *testing.T) {
 func TestScannerRegx(t *testing.T) {
 	reg := regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
 	sc := NewScanner(1, 0, false)
-	err := sc.SearchWithRegx("https://en.wikipedia.org/wiki/Email_address", reg)
+	err := sc.SearchWithRegex("https://en.wikipedia.org/wiki/Email_address", reg)
 	if err != nil {
 		t.Error(err)
 	}

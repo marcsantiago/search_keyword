@@ -30,13 +30,12 @@ var (
 	// ErrUnresolvedOrTimedOut ...
 	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timed out")
 	// EmailRegex provides a base email regex for scraping emails
-	EmailRegex = regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
-
+	EmailRegex      = regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
 	logkey          = "Scanner"
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
 )
 
-// Result is the basic return type for Search and SearchWithRegx
+// Result is the basic return type for Search and SearchWithRegex
 type Result struct {
 	// Keyword is the passed keyword. It is an interface because it can be a string or regular expression
 	Keyword interface{} `json:"keyword,omitempty"`
@@ -304,8 +303,8 @@ func (sc *Scanner) SearchForEmail(URL string, emailRegex *regexp.Regexp, filters
 	return
 }
 
-// SearchWithRegx allows you to pass a regular expression i as a search paramter
-func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error) {
+// SearchWithRegex allows you to pass a regular expression i as a search paramter
+func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error) {
 	sc.Semaphore.load()
 	defer sc.Semaphore.release()
 

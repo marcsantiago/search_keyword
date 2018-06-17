@@ -26,7 +26,7 @@ Package search searches for a keyword within the html of pages (safe for concurr
   * [func NewScanner(limit int, enableLogging bool) *Scanner](#NewScanner)
   * [func (sc *Scanner) ResultsToReader() (io.Reader, error)](#Scanner.ResultsToReader)
   * [func (sc *Scanner) Search(URL, keyword string) (err error)](#Scanner.Search)
-  * [func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error)](#Scanner.SearchWithRegx)
+  * [func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error)](#Scanner.SearchWithRegex)
 
 
 #### <a name="pkg-files">Package files</a>
@@ -57,7 +57,7 @@ type Result struct {
     Found bool
 }
 ```
-Result is the basic return type for Search and SearchWithRegx
+Result is the basic return type for Search and SearchWithRegex
 
 
 
@@ -146,11 +146,11 @@ Search looks for the passed keyword in the html respose
 
 
 
-### <a name="Scanner.SearchWithRegx">func</a> (\*Scanner) [SearchWithRegx](/src/target/search.go?s=4733:4814#L194)
+### <a name="Scanner.SearchWithRegex">func</a> (\*Scanner) [SearchWithRegex](/src/target/search.go?s=4733:4814#L194)
 ``` go
-func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error)
+func (sc *Scanner) SearchWithRegex(URL string, keyword *regexp.Regexp) (err error)
 ```
-SearchWithRegx allows you to pass a regular expression i as a search paramter
+SearchWithRegex allows you to pass a regular expression i as a search paramter
 
 
 
