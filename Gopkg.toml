@@ -26,9 +26,5 @@
   version = "1.1.0"
 
 [[constraint]]
-  name = "github.com/fatih/color"
-  version = "1.5.0"
-
-[[constraint]]
   branch = "master"
   name = "github.com/marcsantiago/logger"

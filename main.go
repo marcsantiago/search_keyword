@@ -13,14 +13,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fatih/color"
 	log "github.com/marcsantiago/logger"
 	"github.com/marcsantiago/search_keyword/search"
 )
 
 const logKey = "Main"
-
-var errColor = color.New(color.FgRed).SprintFunc()
 
 func readFromDirectory(dir, keyword string, sc *search.Scanner) (err error) {
 	var wg sync.WaitGroup
@@ -88,7 +85,7 @@ func scan(line, keyword string, wg *sync.WaitGroup, sc *search.Scanner) {
 	URL := strings.Replace(parts[1], "\"", "", -1)
 	err := sc.Search(URL, keyword)
 	if err != nil {
-		log.Error(logKey, "search error", "error", errColor(err))
+		log.Error(logKey, "search error", "error", err)
 	}
 }
 

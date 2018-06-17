@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/fatih/color"
 	log "github.com/marcsantiago/logger"
 )
 
@@ -24,23 +23,17 @@ var (
 	// DefaultTimeout is the duration used to determine get request timeout
 	// this is exported so that I can be changed
 	DefaultTimeout = 10 * time.Second
-
 	// ErrURLEmpty to warn users that they passed an empty string in
 	ErrURLEmpty = fmt.Errorf("url string is empty")
 	// ErrDomainMissing domain was missing from the url
 	ErrDomainMissing = fmt.Errorf("url domain e.g .com, .net was missing")
 	// ErrUnresolvedOrTimedOut ...
 	ErrUnresolvedOrTimedOut = fmt.Errorf("url could not be resolved or timed out")
-
 	// EmailRegex provides a base email regex for scraping emails
 	EmailRegex = regexp.MustCompile(`([a-z0-9!#$%&'*+\/=?^_{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_{|}~-]+)*(@|\sat\s)(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(\.|\sdot\s))+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)`)
 
-	searchTermColor = color.New(color.FgGreen).SprintFunc()
-	foundColor      = color.New(color.FgGreen).SprintFunc()
-	notFoundColor   = color.New(color.FgRed).SprintFunc()
+	logkey          = "Scanner"
 	newLineReplacer = strings.NewReplacer("\r\n", "", "\n", "", "\r", "")
-
-	logkey = "Scanner"
 )
 
 // Result is the basic return type for Search and SearchWithRegx
@@ -187,11 +180,11 @@ func NewScanner(concurrentLimit, depthLimit int, enableLogging bool) *Scanner {
 
 func (sc *Scanner) saveResult(URL string, keyword interface{}, found bool, chunk interface{}) {
 	if sc.Logging {
-		foundS := notFoundColor("no")
+		foundS := "no"
 		if found {
-			foundS = foundColor("yes")
+			foundS = "yes"
 		}
-		log.Info(logkey, "result", "search term", searchTermColor(keyword), "found", foundS, "url", URL)
+		log.Info(logkey, "result", "search term", keyword, "found", foundS, "url", URL)
 	}
 
 	sc.mxt.Lock()

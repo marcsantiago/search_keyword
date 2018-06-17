@@ -24,7 +24,6 @@ Package search searches for a keyword within the html of pages (safe for concurr
   * [func (slice Results) Swap(i, j int)](#Results.Swap)
 * [type Scanner](#Scanner)
   * [func NewScanner(limit int, enableLogging bool) *Scanner](#NewScanner)
-  * [func (sc *Scanner) GetResults() Results](#Scanner.GetResults)
   * [func (sc *Scanner) ResultsToReader() (io.Reader, error)](#Scanner.ResultsToReader)
   * [func (sc *Scanner) Search(URL, keyword string) (err error)](#Scanner.Search)
   * [func (sc *Scanner) SearchWithRegx(URL string, keyword *regexp.Regexp) (err error)](#Scanner.SearchWithRegx)
@@ -124,16 +123,6 @@ Scanner is the basic structure used to interact with the html content of the pag
 func NewScanner(limit int, enableLogging bool) *Scanner
 ```
 NewScanner returns a new scanner that takes a limit as a paramter to limit the number of goroutines spinning up
-
-
-
-
-
-### <a name="Scanner.GetResults">func</a> (\*Scanner) [GetResults](/src/target/search.go?s=6152:6191#L257)
-``` go
-func (sc *Scanner) GetResults() Results
-```
-GetResults returns raw results not converted to a io.Reader
 
 
 
